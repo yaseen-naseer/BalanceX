@@ -1,0 +1,179 @@
+import { prisma } from "@/lib/db"
+
+export interface CustomerOutstanding {
+  customerId: string
+  customerName: string
+  customerType: "CONSUMER" | "CORPORATE"
+  outstanding: number
+  creditLimit: number | null
+  limitUsedPercentage: number | null
+  lastActivityDate: Date | null
+}
+
+export interface CreditSummary {
+  totalOutstanding: number
+  consumerOutstanding: number
+  corporateOutstanding: number
+  customerCount: number
+  consumerCount: number
+  corporateCount: number
+  overdueCustomers: number // > 30 days
+}
+
+export async function calculateCustomerOutstanding(
+  customerId: string
+): Promise<number> {
+  const transactions = await prisma.creditTransaction.findMany({
+    where: { customerId },
+  })
+
+  return transactions.reduce((sum, tx) => {
+    if (tx.type === "CREDIT_SALE") {
+      return sum + Number(tx.amount)
+    } else {
+      return sum - Number(tx.amount)
+    }
+  }, 0)
+}
+
+export async function getAllCustomerOutstandings(): Promise<CustomerOutstanding[]> {
+  const customers = await prisma.creditCustomer.findMany({
+    where: { isActive: true },
+  })
+
+  const results: CustomerOutstanding[] = []
+
+  for (const customer of customers) {
+    const transactions = await prisma.creditTransaction.findMany({
+      where: { customerId: customer.id },
+      orderBy: { createdAt: "desc" },
+    })
+
+    const outstanding = transactions.reduce((sum, tx) => {
+      if (tx.type === "CREDIT_SALE") {
+        return sum + Number(tx.amount)
+      } else {
+        return sum - Number(tx.amount)
+      }
+    }, 0)
+
+    const creditLimit = customer.creditLimit ? Number(customer.creditLimit) : null
+    const limitUsedPercentage =
+      creditLimit && creditLimit > 0 ? (outstanding / creditLimit) * 100 : null
+
+    results.push({
+      customerId: customer.id,
+      customerName: customer.name,
+      customerType: customer.type,
+      outstanding,
+      creditLimit,
+      limitUsedPercentage,
+      lastActivityDate: transactions[0]?.date || null,
+    })
+  }
+
+  return results
+}
+
+export async function getCreditSummary(): Promise<CreditSummary> {
+  const customerOutstandings = await getAllCustomerOutstandings()
+
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+  let totalOutstanding = 0
+  let consumerOutstanding = 0
+  let corporateOutstanding = 0
+  let consumerCount = 0
+  let corporateCount = 0
+  let overdueCustomers = 0
+
+  for (const customer of customerOutstandings) {
+    if (customer.outstanding > 0) {
+      totalOutstanding += customer.outstanding
+
+      if (customer.customerType === "CONSUMER") {
+        consumerOutstanding += customer.outstanding
+        consumerCount++
+      } else {
+        corporateOutstanding += customer.outstanding
+        corporateCount++
+      }
+
+      // Check if overdue
+      if (
+        customer.lastActivityDate &&
+        customer.lastActivityDate < thirtyDaysAgo
+      ) {
+        overdueCustomers++
+      }
+    }
+  }
+
+  return {
+    totalOutstanding,
+    consumerOutstanding,
+    corporateOutstanding,
+    customerCount: consumerCount + corporateCount,
+    consumerCount,
+    corporateCount,
+    overdueCustomers,
+  }
+}
+
+export interface CreditLimitCheck {
+  allowed: boolean
+  requiresOverride: boolean
+  currentOutstanding: number
+  creditLimit: number | null
+  newTotal: number
+  exceedsBy: number
+}
+
+export async function checkCreditLimit(
+  customerId: string,
+  newAmount: number
+): Promise<CreditLimitCheck> {
+  const customer = await prisma.creditCustomer.findUnique({
+    where: { id: customerId },
+  })
+
+  if (!customer) {
+    throw new Error("Customer not found")
+  }
+
+  const currentOutstanding = await calculateCustomerOutstanding(customerId)
+  const newTotal = currentOutstanding + newAmount
+  const creditLimit = customer.creditLimit ? Number(customer.creditLimit) : null
+
+  if (!creditLimit) {
+    return {
+      allowed: true,
+      requiresOverride: false,
+      currentOutstanding,
+      creditLimit: null,
+      newTotal,
+      exceedsBy: 0,
+    }
+  }
+
+  if (newTotal > creditLimit) {
+    return {
+      allowed: false,
+      requiresOverride: true, // Owner can override
+      currentOutstanding,
+      creditLimit,
+      newTotal,
+      exceedsBy: newTotal - creditLimit,
+    }
+  }
+
+  return {
+    allowed: true,
+    requiresOverride: false,
+    currentOutstanding,
+    creditLimit,
+    newTotal,
+    exceedsBy: 0,
+  }
+}

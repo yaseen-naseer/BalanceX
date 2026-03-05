@@ -1,0 +1,514 @@
+// BalanceX - Retail Finance Manager
+// Prisma Schema v1.0 - All 14 models as per IMPLEMENTATION_PLAN.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// 1. USER MODEL - Authentication & Authorization
+// ============================================
+enum UserRole {
+  OWNER
+  ACCOUNTANT
+  SALES
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  name         String
+  email        String?  @unique
+  passwordHash String
+  role         UserRole @default(SALES)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Account lockout fields (security)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  // Relations
+  dailyEntries          DailyEntry[]
+  creditTransactions    CreditTransaction[]
+  bankTransactions      BankTransaction[]
+  walletTopups          WalletTopup[]
+  telcoScreenshots      TelcoScreenshot[]
+  amendmentsReopened    DailyEntryAmendment[] @relation("AmendmentReopener")
+  amendmentsResubmitted DailyEntryAmendment[] @relation("AmendmentResubmitter")
+
+  @@map("users")
+}
+
+// ============================================
+// 2. DAILY ENTRY MODEL - Main daily record
+// ============================================
+enum DailyEntryStatus {
+  DRAFT
+  SUBMITTED
+}
+
+model DailyEntry {
+  id     String           @id @default(cuid())
+  date   DateTime         @unique @db.Date
+  status DailyEntryStatus @default(DRAFT)
+
+  // Audit fields
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  submittedAt DateTime?
+
+  // Relations
+  user        User                  @relation(fields: [createdBy], references: [id])
+  cashDrawer  DailyEntryCashDrawer?
+  wallet      DailyEntryWallet?
+  categories  DailyEntryCategory[]
+  notes       DailyEntryNotes?
+  creditSales CreditSale[]
+  screenshot  TelcoScreenshot?
+  cashFloat   CashFloatLog?
+  amendments  DailyEntryAmendment[]
+
+  @@map("daily_entries")
+}
+
+// ============================================
+// 3. DAILY ENTRY CASH DRAWER
+// ============================================
+model DailyEntryCashDrawer {
+  id           String @id @default(cuid())
+  dailyEntryId String @unique
+
+  opening         Decimal @default(0) @db.Decimal(12, 2)
+  bankDeposits    Decimal @default(0) @db.Decimal(12, 2)
+  closingActual   Decimal @default(0) @db.Decimal(12, 2)
+  closingExpected Decimal @default(0) @db.Decimal(12, 2)
+  variance        Decimal @default(0) @db.Decimal(12, 2)
+
+  // Relation
+  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+
+  @@map("daily_entry_cash_drawers")
+}
+
+// ============================================
+// 4. DAILY ENTRY WALLET
+// ============================================
+enum WalletOpeningSource {
+  PREVIOUS_DAY
+  INITIAL_SETUP
+  MANUAL
+}
+
+model DailyEntryWallet {
+  id           String @id @default(cuid())
+  dailyEntryId String @unique
+
+  opening         Decimal             @default(0) @db.Decimal(12, 2)
+  openingSource   WalletOpeningSource @default(PREVIOUS_DAY)
+  closingActual   Decimal             @default(0) @db.Decimal(12, 2)
+  closingExpected Decimal             @default(0) @db.Decimal(12, 2)
+  variance        Decimal             @default(0) @db.Decimal(12, 2)
+
+  // Relation
+  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+
+  @@map("daily_entry_wallets")
+}
+
+// ============================================
+// 5. DAILY ENTRY CATEGORY - Sales by category
+// ============================================
+enum CategoryType {
+  DHIRAAGU_BILLS
+  RETAIL_RELOAD
+  WHOLESALE_RELOAD
+  SIM
+  USIM
+}
+
+model DailyEntryCategory {
+  id           String       @id @default(cuid())
+  dailyEntryId String
+  category     CategoryType
+
+  // Consumer sales
+  consumerCash     Decimal @default(0) @db.Decimal(12, 2)
+  consumerTransfer Decimal @default(0) @db.Decimal(12, 2)
+  consumerCredit   Decimal @default(0) @db.Decimal(12, 2)
+
+  // Corporate sales
+  corporateCash     Decimal @default(0) @db.Decimal(12, 2)
+  corporateTransfer Decimal @default(0) @db.Decimal(12, 2)
+  corporateCredit   Decimal @default(0) @db.Decimal(12, 2)
+
+  // Quantity fields (for SIM/USIM)
+  quantity Int @default(0)
+
+  // Relation
+  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([dailyEntryId, category])
+  @@map("daily_entry_categories")
+}
+
+// ============================================
+// 6. DAILY ENTRY NOTES
+// ============================================
+model DailyEntryNotes {
+  id           String  @id @default(cuid())
+  dailyEntryId String  @unique
+  content      String? @db.Text
+
+  // Relation
+  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+
+  @@map("daily_entry_notes")
+}
+
+// ============================================
+// 7. CREDIT CUSTOMER - Customer registry
+// ============================================
+enum CustomerType {
+  CONSUMER
+  CORPORATE
+}
+
+model CreditCustomer {
+  id          String       @id @default(cuid())
+  name        String
+  type        CustomerType
+  phone       String
+  email       String?
+  creditLimit Decimal?     @db.Decimal(12, 2) // null = no limit
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  creditSales  CreditSale[]
+  transactions CreditTransaction[]
+
+  @@map("credit_customers")
+}
+
+// ============================================
+// 8. CREDIT SALE - Individual credit sale linked to daily entry
+// ============================================
+model CreditSale {
+  id           String   @id @default(cuid())
+  dailyEntryId String
+  customerId   String
+  amount       Decimal  @db.Decimal(12, 2)
+  reference    String?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  dailyEntry DailyEntry     @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+  customer   CreditCustomer @relation(fields: [customerId], references: [id])
+
+  @@map("credit_sales")
+}
+
+// ============================================
+// 9. CREDIT TRANSACTION - Sales and Settlements
+// ============================================
+enum CreditTransactionType {
+  CREDIT_SALE
+  SETTLEMENT
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+}
+
+model CreditTransaction {
+  id            String                @id @default(cuid())
+  customerId    String
+  type          CreditTransactionType
+  amount        Decimal               @db.Decimal(12, 2)
+  paymentMethod PaymentMethod? // Only for settlements
+  reference     String?
+  notes         String?               @db.Text
+  date          DateTime              @db.Date
+  createdBy     String
+  createdAt     DateTime              @default(now())
+
+  // Running balance at time of transaction
+  balanceAfter Decimal @db.Decimal(12, 2)
+
+  // Relations
+  customer CreditCustomer @relation(fields: [customerId], references: [id])
+  user     User           @relation(fields: [createdBy], references: [id])
+
+  @@map("credit_transactions")
+}
+
+// ============================================
+// 10. BANK TRANSACTION - Deposits and Withdrawals
+// ============================================
+enum BankTransactionType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+model BankTransaction {
+  id        String              @id @default(cuid())
+  type      BankTransactionType
+  amount    Decimal             @db.Decimal(12, 2)
+  reference String
+  notes     String?             @db.Text
+  date      DateTime            @db.Date
+  createdBy String
+  createdAt DateTime            @default(now())
+
+  // Running balance at time of transaction
+  balanceAfter Decimal @db.Decimal(12, 2)
+
+  // Set when this transaction was auto-created from a daily entry (YYYY-MM-DD)
+  dailyEntryDate String?
+
+  // Relation
+  user User @relation(fields: [createdBy], references: [id])
+
+  @@index([dailyEntryDate])
+  @@map("bank_transactions")
+}
+
+// ============================================
+// 11. BANK SETTINGS - Opening balance configuration
+// ============================================
+model BankSettings {
+  id             String   @id @default(cuid())
+  openingBalance Decimal  @db.Decimal(12, 2)
+  openingDate    DateTime @db.Date
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("bank_settings")
+}
+
+// ============================================
+// 12. WALLET TOPUP - Top-up records
+// ============================================
+enum WalletTopupSource {
+  CASH
+  BANK
+}
+
+model WalletTopup {
+  id        String            @id @default(cuid())
+  amount    Decimal           @db.Decimal(12, 2)
+  source    WalletTopupSource
+  notes     String?           @db.Text
+  date      DateTime          @db.Date
+  createdBy String
+  createdAt DateTime          @default(now())
+
+  // Relation
+  user User @relation(fields: [createdBy], references: [id])
+
+  @@map("wallet_topups")
+}
+
+// ============================================
+// 13. WALLET SETTINGS - Opening balance configuration
+// ============================================
+model WalletSettings {
+  id             String   @id @default(cuid())
+  openingBalance Decimal  @db.Decimal(12, 2)
+  openingDate    DateTime @db.Date
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("wallet_settings")
+}
+
+// ============================================
+// 14. TELCO SCREENSHOT - Uploaded screenshots
+// ============================================
+model TelcoScreenshot {
+  id           String   @id @default(cuid())
+  dailyEntryId String   @unique
+  filename     String
+  filepath     String
+  mimeType     String
+  fileSize     Int
+  uploadedBy   String
+  uploadedAt   DateTime @default(now())
+
+  // Verification
+  isVerified  Boolean   @default(false)
+  verifiedBy  String?
+  verifiedAt  DateTime?
+  verifyNotes String?   @db.Text
+
+  // Relations
+  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+  uploader   User       @relation(fields: [uploadedBy], references: [id])
+
+  @@map("telco_screenshots")
+}
+
+// ============================================
+// 15. CASH FLOAT SETTINGS - Owner-defined float amounts
+// ============================================
+model CashFloatSettings {
+  id            String   @id @default(cuid())
+  name          String   // e.g., "Standard Float", "Weekend Float"
+  amount        Decimal  @db.Decimal(12, 2)
+  isDefault     Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("cash_float_settings")
+}
+
+// ============================================
+// 15b. SHIFT SETTINGS - Owner-defined shifts
+// ============================================
+model ShiftSettings {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "Morning", "Afternoon", "Evening"
+  startTime   String?  // e.g., "08:00" (optional)
+  endTime     String?  // e.g., "16:00" (optional)
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("shift_settings")
+}
+
+// ============================================
+// 16. AUDIT LOG - Security audit trail
+// ============================================
+enum AuditAction {
+  CREDIT_LIMIT_OVERRIDE
+  USER_LOGIN
+  USER_LOGOUT
+  USER_LOCKED
+  PASSWORD_CHANGE
+  ROLE_CHANGE
+  CUSTOMER_CREATED
+  CUSTOMER_DEACTIVATED
+  SETTINGS_CHANGED
+  DAILY_ENTRY_SUBMITTED
+  DAILY_ENTRY_REOPENED
+  DAILY_ENTRY_AMENDED
+  DAILY_ENTRY_CREATED
+  CREDIT_SALE_ADDED
+  CREDIT_SALE_DELETED
+  SETTLEMENT_RECORDED
+  BANK_TRANSACTION_ADDED
+  BANK_TRANSACTION_DELETED
+  WALLET_TOPUP_ADDED
+  WALLET_TOPUP_DELETED
+  USER_CREATED
+  USER_DEACTIVATED
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  action    AuditAction
+  userId    String?     // User who performed the action (null for system actions)
+  targetId  String?     // ID of affected resource (customer, user, etc.)
+  details   String?     @db.Text // JSON string with additional context
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime    @default(now())
+
+  @@index([action])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================
+// 17. CASH FLOAT LOG - Per-shift float tracking
+// ============================================
+model CashFloatLog {
+  id            String   @id @default(cuid())
+  dailyEntryId  String   @unique
+  shiftId       String?
+  shiftName     String   @default("Default")
+  
+  // Selected float setting
+  selectedFloatId String?
+  selectedFloatAmount Decimal @db.Decimal(12, 2)
+  
+  // Opening Float (start of shift)
+  openingFloatVerified Boolean @default(false)
+  openingFloatNotes    String? @db.Text
+  
+  // Opening Breakdown (denominations)
+  openingMvr1000 Int @default(0)
+  openingMvr500  Int @default(0)
+  openingMvr100  Int @default(0)
+  openingMvr50   Int @default(0)
+  openingMvr20   Int @default(0)
+  openingMvr10   Int @default(0)
+  openingMvr5    Int @default(0)
+  openingMvr2    Int @default(0)
+  openingMvr1    Int @default(0)
+  openingMvr050  Int @default(0) // 50 laari / 0.50 MVR
+  
+  // Closing Float (end of shift)
+  closingFloatVerified Boolean @default(false)
+  closingFloatNotes    String? @db.Text
+  
+  // Closing Breakdown
+  closingMvr1000 Int @default(0)
+  closingMvr500  Int @default(0)
+  closingMvr100  Int @default(0)
+  closingMvr50   Int @default(0)
+  closingMvr20   Int @default(0)
+  closingMvr10   Int @default(0)
+  closingMvr5    Int @default(0)
+  closingMvr2    Int @default(0)
+  closingMvr1    Int @default(0)
+  closingMvr050  Int @default(0) // 50 laari / 0.50 MVR
+  
+  // Calculated
+  openingTotal  Decimal @default(0) @db.Decimal(12, 2)
+  closingTotal  Decimal @default(0) @db.Decimal(12, 2)
+  variance      Decimal @default(0) @db.Decimal(12, 2)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+
+  @@map("cash_float_logs")
+}
+
+// ============================================
+// 18. DAILY ENTRY AMENDMENT - Audit trail for reopened entries
+// ============================================
+model DailyEntryAmendment {
+  id           String     @id @default(cuid())
+  dailyEntryId String
+  dailyEntry   DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+  reason       String     @db.Text
+  reopenedBy   String
+  reopenedByUser User     @relation("AmendmentReopener", fields: [reopenedBy], references: [id])
+  reopenedAt   DateTime   @default(now())
+  resubmittedBy  String?
+  resubmittedByUser User? @relation("AmendmentResubmitter", fields: [resubmittedBy], references: [id])
+  resubmittedAt  DateTime?
+  snapshotBefore String   @db.Text
+  snapshotAfter  String?  @db.Text
+
+  @@index([dailyEntryId])
+  @@map("daily_entry_amendments")
+}
