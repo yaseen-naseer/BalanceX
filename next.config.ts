@@ -4,8 +4,8 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
 
-  // Allow dev-mode access from other devices on the local network
-  allowedDevOrigins: ["172.18.3.138"],
+  // Allow dev-mode access from other devices on the local network (ignored in production)
+  allowedDevOrigins: process.env.NODE_ENV === "development" ? ["172.18.3.138"] : [],
 
   // Security: Configure body size limits for API routes
   experimental: {
