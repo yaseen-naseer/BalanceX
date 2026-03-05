@@ -97,7 +97,7 @@ export default function WalletPage() {
     // Add topups
     monthTopups.forEach((t) => {
       rows.push({
-        date: typeof t.date === 'string' ? t.date.split('T')[0] : format(new Date(t.date), 'yyyy-MM-dd'),
+        date: format(new Date(t.date), 'yyyy-MM-dd'),
         type: 'topup',
         amount: Number(t.amount),
         label: `Top-up (${t.source})`,
