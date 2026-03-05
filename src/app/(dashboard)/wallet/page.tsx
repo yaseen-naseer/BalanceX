@@ -116,9 +116,7 @@ export default function WalletPage() {
       }, 0) ?? 0
 
       if (reloadTotal > 0) {
-        const dateStr = typeof entry.date === 'string'
-          ? entry.date.split('T')[0]
-          : format(new Date(entry.date), 'yyyy-MM-dd')
+        const dateStr = format(new Date(entry.date), 'yyyy-MM-dd')
         rows.push({
           date: dateStr,
           type: 'reload',
