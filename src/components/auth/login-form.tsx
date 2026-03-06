@@ -48,6 +48,12 @@ export function LoginForm() {
         redirect: false,
       })
 
+      if (result?.status === 429) {
+        setLoginError("Too many login attempts. Please wait a moment and try again.")
+        setIsLoading(false)
+        return
+      }
+
       if (result?.error) {
         setLoginError("Invalid username or password")
         setIsLoading(false)

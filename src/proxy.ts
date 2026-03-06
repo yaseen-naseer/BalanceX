@@ -69,8 +69,9 @@ export function proxy(request: NextRequest) {
     (path) => pathname === path || pathname.startsWith(path)
   )
 
-  // Rate limit auth endpoints
-  if (pathname.startsWith("/api/auth")) {
+  // Rate limit only the sign-in endpoint (brute force protection)
+  // Session checks, CSRF, and signout are not rate limited
+  if (pathname === "/api/auth/callback/credentials") {
     const key = `auth:${ip}`
     const result = checkRateLimit(key, AUTH_LIMIT, AUTH_WINDOW)
 
