@@ -114,40 +114,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Enforce grid credit cap per customer type
-    const [entryCategory, existingSalesOfType] = await Promise.all([
-      prisma.dailyEntryCategory.findFirst({
-        where: { dailyEntryId, category: "DHIRAAGU_BILLS" },
-        select: { consumerCredit: true, corporateCredit: true },
-      }),
-      prisma.creditSale.findMany({
-        where: { dailyEntryId },
-        include: { customer: { select: { type: true } } },
-      }),
-    ])
-
-    const gridCreditForType =
-      customer.type === "CONSUMER"
-        ? Number(entryCategory?.consumerCredit ?? 0)
-        : Number(entryCategory?.corporateCredit ?? 0)
-
-    const alreadyLinkedOfType = existingSalesOfType
-      .filter((s) => s.customer.type === customer.type)
-      .reduce((sum, s) => sum + Number(s.amount), 0)
-
-    const remaining = gridCreditForType - alreadyLinkedOfType
-
-    if (amount > remaining) {
-      const typeLabel = customer.type === "CONSUMER" ? "consumer" : "corporate"
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Amount exceeds available ${typeLabel} credit in the grid. Available: ${Math.max(0, remaining).toLocaleString()} MVR.`,
-        },
-        { status: 400 }
-      )
-    }
-
     // Create the credit sale
     const creditSale = await prisma.creditSale.create({
       data: {

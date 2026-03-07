@@ -140,6 +140,8 @@ export function CategoryTable({
                       const notAllowed =
                         (pm.key === 'credit' && category.key !== 'DHIRAAGU_BILLS') ||
                         (ct.key === 'corporate' && category.key !== 'DHIRAAGU_BILLS')
+                      // Credit fields are auto-derived from linked credit sales — read-only
+                      const isAutoCredit = pm.key === 'credit' && category.key === 'DHIRAAGU_BILLS'
                       return (
                         <td
                           key={`${ct.key}-${pm.key}`}
@@ -148,6 +150,10 @@ export function CategoryTable({
                           {notAllowed ? (
                             <div className="h-8 w-24 flex items-center justify-center text-muted-foreground text-sm bg-muted/40 rounded-md">
                               —
+                            </div>
+                          ) : isAutoCredit ? (
+                            <div className="h-8 w-24 flex items-center justify-end px-2 text-sm font-mono text-muted-foreground bg-muted/40 rounded-md border border-dashed">
+                              {((localData.categories[category.key][key] as number) || 0).toLocaleString()}
                             </div>
                           ) : (
                             <CurrencyInput

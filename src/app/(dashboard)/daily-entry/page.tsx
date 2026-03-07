@@ -354,13 +354,8 @@ export default function DailyEntryPage() {
             {/* Credit Sales Section */}
             <CreditSalesSection
               entry={form.entry}
-              gridCreditTotal={form.gridCreditTotal}
-              linkedCreditTotal={form.linkedCreditTotal}
-              gridConsumerCreditTotal={form.gridConsumerCreditTotal}
-              gridCorporateCreditTotal={form.gridCorporateCreditTotal}
               linkedConsumerCreditTotal={form.linkedConsumerCreditTotal}
               linkedCorporateCreditTotal={form.linkedCorporateCreditTotal}
-              creditBalanced={form.creditBalanced}
               isReadOnly={form.isReadOnly}
               onRefreshEntry={form.refreshEntry}
               onSaveDraft={form.saveDraft}
