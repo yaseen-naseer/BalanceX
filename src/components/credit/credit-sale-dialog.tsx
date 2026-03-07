@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Plus } from 'lucide-react'
+import { Plus, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/use-auth'
 import type { CreditCustomerWithBalance, CreateCreditCustomerDto } from '@/types'
@@ -27,9 +27,11 @@ interface CreditSaleDialogProps {
   onSaleAdded: () => void
   onSaveDraft?: () => Promise<string | false>
   disabled?: boolean
+  consumerCreditNeeded?: number
+  corporateCreditNeeded?: number
 }
 
-export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disabled }: CreditSaleDialogProps) {
+export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disabled, consumerCreditNeeded, corporateCreditNeeded }: CreditSaleDialogProps) {
   const { isOwner } = useAuth()
   const [open, setOpen] = useState(false)
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false)
@@ -138,6 +140,19 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
     if (isNaN(amountNum) || amountNum <= 0) {
       toast.error('Please enter a valid amount')
       return
+    }
+
+    // Block if amount would exceed the grid credit for this customer type
+    if (consumerCreditNeeded !== undefined && corporateCreditNeeded !== undefined) {
+      const needed = selectedCustomer.type === 'CONSUMER' ? consumerCreditNeeded : corporateCreditNeeded
+      const typeLabel = selectedCustomer.type === 'CONSUMER' ? 'consumer' : 'corporate'
+      if (amountNum > needed) {
+        toast.error(
+          `Amount exceeds available ${typeLabel} credit in the grid`,
+          { description: `${Math.max(0, needed).toLocaleString()} MVR remaining — reduce the amount or update the grid values first.` }
+        )
+        return
+      }
     }
 
     const currentBalance = selectedCustomer.outstandingBalance
@@ -258,6 +273,24 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
             {selectedCustomer && (
               <CustomerInfoCard customer={selectedCustomer} newAmount={newAmountValue} />
             )}
+
+            {selectedCustomer && consumerCreditNeeded !== undefined && corporateCreditNeeded !== undefined && (() => {
+              const isConsumer = selectedCustomer.type === 'CONSUMER'
+              const needed = isConsumer ? consumerCreditNeeded : corporateCreditNeeded
+              if (needed > 0) return null
+              const typeLabel = isConsumer ? 'Consumer' : 'Corporate'
+              const otherLabel = isConsumer ? 'Corporate' : 'Consumer'
+              const otherNeeded = isConsumer ? corporateCreditNeeded : consumerCreditNeeded
+              return (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <p>
+                    {typeLabel} credit in the grid is already fully linked.
+                    {otherNeeded > 0 && ` You may need a ${otherLabel} customer (${otherNeeded.toLocaleString()} MVR remaining).`}
+                  </p>
+                </div>
+              )
+            })()}
 
             <div className="space-y-2">
               <Label htmlFor="amount">Amount (MVR) *</Label>

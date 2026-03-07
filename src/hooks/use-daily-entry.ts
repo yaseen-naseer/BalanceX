@@ -178,6 +178,7 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
   useEffect(() => {
     if (date && autoFetch && !didFetchRef.current) {
       didFetchRef.current = true
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchEntry(date)
     }
   }, [date, autoFetch, fetchEntry])

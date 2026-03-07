@@ -117,6 +117,10 @@ export interface UseDailyEntryFormReturn {
   // Credit data
   linkedCreditTotal: number
   gridCreditTotal: number
+  linkedConsumerCreditTotal: number
+  linkedCorporateCreditTotal: number
+  gridConsumerCreditTotal: number
+  gridCorporateCreditTotal: number
   creditBalanced: boolean
 
   // State
@@ -301,20 +305,44 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     }
   }, [localData, totalTopups, reloadSalesTotal, totals.totalCash, calculationData])
 
-  // Credit data
-  const linkedCreditTotal = useMemo(() => {
+  // Credit data — per type
+  const linkedConsumerCreditTotal = useMemo(() => {
     if (!entry?.creditSales) return 0
-    return entry.creditSales.reduce((sum, sale) => sum + Number(sale.amount), 0)
+    return entry.creditSales
+      .filter((s) => s.customer.type === 'CONSUMER')
+      .reduce((sum, s) => sum + Number(s.amount), 0)
   }, [entry?.creditSales])
 
-  const gridCreditTotal = useMemo(() => {
-    return (
-      localData.categories.DHIRAAGU_BILLS.consumerCredit +
-      localData.categories.DHIRAAGU_BILLS.corporateCredit
-    )
-  }, [localData])
+  const linkedCorporateCreditTotal = useMemo(() => {
+    if (!entry?.creditSales) return 0
+    return entry.creditSales
+      .filter((s) => s.customer.type === 'CORPORATE')
+      .reduce((sum, s) => sum + Number(s.amount), 0)
+  }, [entry?.creditSales])
 
-  const creditBalanced = gridCreditTotal === linkedCreditTotal
+  const linkedCreditTotal = useMemo(
+    () => linkedConsumerCreditTotal + linkedCorporateCreditTotal,
+    [linkedConsumerCreditTotal, linkedCorporateCreditTotal]
+  )
+
+  const gridConsumerCreditTotal = useMemo(
+    () => localData.categories.DHIRAAGU_BILLS.consumerCredit,
+    [localData]
+  )
+
+  const gridCorporateCreditTotal = useMemo(
+    () => localData.categories.DHIRAAGU_BILLS.corporateCredit,
+    [localData]
+  )
+
+  const gridCreditTotal = useMemo(
+    () => gridConsumerCreditTotal + gridCorporateCreditTotal,
+    [gridConsumerCreditTotal, gridCorporateCreditTotal]
+  )
+
+  const creditBalanced =
+    gridConsumerCreditTotal === linkedConsumerCreditTotal &&
+    gridCorporateCreditTotal === linkedCorporateCreditTotal
 
   // Value change handler
   const handleValueChange = useCallback(
@@ -424,11 +452,18 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
       })
     }
 
-    // Hard block if credit is unbalanced
+    // Hard block if credit is unbalanced (per type)
     if (!creditBalanced && (gridCreditTotal > 0 || linkedCreditTotal > 0)) {
+      const parts: string[] = []
+      if (gridConsumerCreditTotal !== linkedConsumerCreditTotal) {
+        parts.push(`Consumer: grid ${gridConsumerCreditTotal.toLocaleString()} MVR, linked ${linkedConsumerCreditTotal.toLocaleString()} MVR`)
+      }
+      if (gridCorporateCreditTotal !== linkedCorporateCreditTotal) {
+        parts.push(`Corporate: grid ${gridCorporateCreditTotal.toLocaleString()} MVR, linked ${linkedCorporateCreditTotal.toLocaleString()} MVR`)
+      }
       messages.push({
         type: "block",
-        message: `Credit is unbalanced: Grid shows ${gridCreditTotal.toLocaleString()} MVR but linked sales total ${linkedCreditTotal.toLocaleString()} MVR.`,
+        message: `Credit is unbalanced — ${parts.join('; ')}.`,
       })
     }
 
@@ -458,7 +493,7 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
 
     const hasWarnings = messages.some((m) => m.type === "warning")
     return { canSubmit: true, hasWarnings, hasBlocks: false, messages }
-  }, [variance, creditBalanced, gridCreditTotal, linkedCreditTotal, reloadSalesTotal, totalTopups, localData.wallet.opening])
+  }, [variance, creditBalanced, gridCreditTotal, linkedCreditTotal, gridConsumerCreditTotal, linkedConsumerCreditTotal, gridCorporateCreditTotal, linkedCorporateCreditTotal, reloadSalesTotal, totalTopups, localData.wallet.opening])
 
   // Save draft
   const saveDraft = useCallback(async (): Promise<string | false> => {
@@ -564,6 +599,10 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     // Credit data
     linkedCreditTotal,
     gridCreditTotal,
+    linkedConsumerCreditTotal,
+    linkedCorporateCreditTotal,
+    gridConsumerCreditTotal,
+    gridCorporateCreditTotal,
     creditBalanced,
 
     // Amendment data

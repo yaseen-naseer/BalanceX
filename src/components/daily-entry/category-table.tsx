@@ -29,6 +29,7 @@ function CurrencyInput({ value, onChange, className, disabled }: CurrencyInputPr
   // Sync from parent only when not focused (i.e. data loaded from server, not user typing)
   useEffect(() => {
     if (!isFocused) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalValue(value === 0 ? "" : value.toString())
     }
   }, [value, isFocused])

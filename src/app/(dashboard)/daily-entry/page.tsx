@@ -147,7 +147,7 @@ export default function DailyEntryPage() {
   const canReopen = useMemo(() => {
     if (!user?.role) return false
     return canReopenDailyEntry(user.role, new Date(currentDate))
-  }, [user?.role, currentDate])
+  }, [user, currentDate])
 
   // Get subtitle based on state
   const subtitle = useMemo(() => {
@@ -354,9 +354,12 @@ export default function DailyEntryPage() {
             {/* Credit Sales Section */}
             <CreditSalesSection
               entry={form.entry}
-              currentDate={currentDate}
               gridCreditTotal={form.gridCreditTotal}
               linkedCreditTotal={form.linkedCreditTotal}
+              gridConsumerCreditTotal={form.gridConsumerCreditTotal}
+              gridCorporateCreditTotal={form.gridCorporateCreditTotal}
+              linkedConsumerCreditTotal={form.linkedConsumerCreditTotal}
+              linkedCorporateCreditTotal={form.linkedCorporateCreditTotal}
               creditBalanced={form.creditBalanced}
               isReadOnly={form.isReadOnly}
               onRefreshEntry={form.refreshEntry}

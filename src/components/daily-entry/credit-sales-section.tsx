@@ -12,9 +12,12 @@ import type { DailyEntryWithRelations } from "@/types"
 
 export interface CreditSalesSectionProps {
   entry: DailyEntryWithRelations | null
-  currentDate: string
   gridCreditTotal: number
   linkedCreditTotal: number
+  gridConsumerCreditTotal: number
+  gridCorporateCreditTotal: number
+  linkedConsumerCreditTotal: number
+  linkedCorporateCreditTotal: number
   creditBalanced: boolean
   isReadOnly: boolean
   onRefreshEntry: () => Promise<void>
@@ -27,14 +30,19 @@ export interface CreditSalesSectionProps {
  */
 export function CreditSalesSection({
   entry,
-  currentDate,
   gridCreditTotal,
   linkedCreditTotal,
+  gridConsumerCreditTotal,
+  gridCorporateCreditTotal,
+  linkedConsumerCreditTotal,
+  linkedCorporateCreditTotal,
   creditBalanced,
   isReadOnly,
   onRefreshEntry,
   onSaveDraft,
 }: CreditSalesSectionProps) {
+  const consumerCreditNeeded = gridConsumerCreditTotal - linkedConsumerCreditTotal
+  const corporateCreditNeeded = gridCorporateCreditTotal - linkedCorporateCreditTotal
   const handleDeleteCreditSale = async (saleId: string) => {
     try {
       const response = await fetch(`/api/credit-sales?id=${saleId}`, {
@@ -87,6 +95,8 @@ export function CreditSalesSection({
             onSaleAdded={() => onRefreshEntry()}
             onSaveDraft={onSaveDraft}
             disabled={isReadOnly}
+            consumerCreditNeeded={consumerCreditNeeded}
+            corporateCreditNeeded={corporateCreditNeeded}
           />
         </div>
       </CardHeader>
@@ -130,27 +140,38 @@ export function CreditSalesSection({
               </div>
             ))}
             <Separator />
-            <div className="flex items-center justify-between pt-2">
-              <div className="text-sm text-muted-foreground">
-                Grid Credit Total:{" "}
-                <span className="font-mono font-medium">{gridCreditTotal.toLocaleString()} MVR</span>
-              </div>
-              <div className="text-sm">
-                Linked Total:{" "}
-                <span className="font-mono font-semibold text-amber-600">
-                  {linkedCreditTotal.toLocaleString()} MVR
-                </span>
-              </div>
+            <div className="space-y-1.5 pt-2">
+              {[
+                { label: 'Consumer', grid: gridConsumerCreditTotal, linked: linkedConsumerCreditTotal },
+                { label: 'Corporate', grid: gridCorporateCreditTotal, linked: linkedCorporateCreditTotal },
+              ].map(({ label, grid, linked }) => {
+                if (grid === 0 && linked === 0) return null
+                const balanced = grid === linked
+                return (
+                  <div key={label} className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{label} Credit:</span>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-muted-foreground">{grid.toLocaleString()} MVR grid</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className={cn('font-mono font-semibold', balanced ? 'text-emerald-600' : 'text-amber-600')}>
+                        {linked.toLocaleString()} MVR linked
+                      </span>
+                      {balanced
+                        ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        : <XCircle className="h-3.5 w-3.5 text-amber-500" />}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
             {!creditBalanced && (
               <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <p>
-                  The credit amounts in the grid ({gridCreditTotal.toLocaleString()} MVR) don&apos;t
-                  match the linked credit sales ({linkedCreditTotal.toLocaleString()} MVR).
-                  {gridCreditTotal > linkedCreditTotal
-                    ? " Add more credit sales or reduce grid values."
-                    : " Remove credit sales or increase grid values."}
+                  {[
+                    gridConsumerCreditTotal !== linkedConsumerCreditTotal && `Consumer: ${Math.abs(consumerCreditNeeded).toLocaleString()} MVR ${consumerCreditNeeded > 0 ? 'still needed' : 'over-linked'}`,
+                    gridCorporateCreditTotal !== linkedCorporateCreditTotal && `Corporate: ${Math.abs(corporateCreditNeeded).toLocaleString()} MVR ${corporateCreditNeeded > 0 ? 'still needed' : 'over-linked'}`,
+                  ].filter(Boolean).join(' · ')}
                 </p>
               </div>
             )}

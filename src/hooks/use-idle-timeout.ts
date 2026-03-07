@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { toast } from "sonner"
 import { autoSaveIfDirty } from "@/lib/dirty-guard"
 
@@ -16,7 +16,9 @@ const CHECK_INTERVAL  = 30 * 1000         // check every 30 seconds
 export function useIdleTimeout(onLogout: () => Promise<void> | void) {
   // Keep latest onLogout without re-running the effect
   const onLogoutRef = useRef(onLogout)
-  onLogoutRef.current = onLogout
+  useLayoutEffect(() => {
+    onLogoutRef.current = onLogout
+  })
 
   useEffect(() => {
     let lastActivity = Date.now()

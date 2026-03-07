@@ -272,8 +272,8 @@ export function DataTable<T>({
 
   // Reset to first page when data or search changes
   useEffect(() => {
-    setCurrentPage(1)
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentPage(1)
   }, [searchQuery, data])
 
   // Handle sort click
