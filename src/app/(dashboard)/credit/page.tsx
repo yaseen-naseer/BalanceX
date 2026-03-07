@@ -27,7 +27,7 @@ export default function CreditCustomersPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'CONSUMER' | 'CORPORATE'>('ALL')
   const { isSales } = useAuth()
-  const { customers, isLoading, error, createCustomer, recordSettlement } = useCreditCustomers()
+  const { customers, isLoading, error, createCustomer, updateCustomer, recordSettlement } = useCreditCustomers()
 
   const filteredCustomers = customers.filter((c) => {
     if (typeFilter !== 'ALL' && c.type !== typeFilter) {
@@ -44,6 +44,13 @@ export default function CreditCustomersPage() {
     const result = await createCustomer(data)
     if (result) {
       toast.success(`Customer "${data.name}" added successfully`)
+    }
+  }
+
+  const handleUpdateCustomer = async (id: string, data: import('@/types').UpdateCreditCustomerDto) => {
+    const result = await updateCustomer(id, data)
+    if (result) {
+      toast.success('Customer updated successfully')
     }
   }
 
@@ -120,6 +127,7 @@ export default function CreditCustomersPage() {
               isSales={isSales}
               searchQuery={searchQuery}
               onSettlement={handleSettlement}
+              onUpdate={handleUpdateCustomer}
             />
           </CardContent>
         </Card>

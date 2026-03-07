@@ -217,6 +217,14 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    let reason: string | null = null
+    try {
+      const body = await request.json()
+      reason = body?.reason ?? null
+    } catch {
+      // no body is fine
+    }
+
     // Get the credit sale first
     const creditSale = await prisma.creditSale.findUnique({
       where: { id },
@@ -265,6 +273,7 @@ export async function DELETE(request: NextRequest) {
         customerName: creditSale.customer.name,
         amount: Number(creditSale.amount),
         dailyEntryId: creditSale.dailyEntryId,
+        reason: reason ?? "No reason provided",
       },
       ipAddress: getClientIpFromRequest(request),
       userAgent: getUserAgentFromRequest(request),

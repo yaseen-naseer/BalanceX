@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,16 +22,36 @@ import {
 } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { initialCustomerForm, type NewCustomerFormData } from './types'
-import type { CreateCreditCustomerDto } from '@/types'
+import type { CreateCreditCustomerDto, CreditCustomerWithBalance, UpdateCreditCustomerDto } from '@/types'
 
 export interface CustomerFormDialogProps {
   onSubmit: (data: CreateCreditCustomerDto) => Promise<void>
   trigger: React.ReactNode
+  // Edit mode
+  mode?: 'create' | 'edit'
+  initialData?: CreditCustomerWithBalance
+  onUpdate?: (id: string, data: UpdateCreditCustomerDto) => Promise<void>
 }
 
-export function CustomerFormDialog({ onSubmit, trigger }: CustomerFormDialogProps) {
+export function CustomerFormDialog({ onSubmit, trigger, mode = 'create', initialData, onUpdate }: CustomerFormDialogProps) {
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState<NewCustomerFormData>(initialCustomerForm)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Pre-populate form when editing
+  useEffect(() => {
+    if (open && mode === 'edit' && initialData) {
+      setFormData({
+        name: initialData.name,
+        phone: initialData.phone,
+        email: initialData.email ?? '',
+        type: initialData.type,
+        creditLimit: initialData.creditLimit != null ? String(initialData.creditLimit) : '',
+      })
+    } else if (!open) {
+      setFormData(initialCustomerForm)
+    }
+  }, [open, mode, initialData])
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
@@ -42,24 +62,43 @@ export function CustomerFormDialog({ onSubmit, trigger }: CustomerFormDialogProp
       toast.error('Please enter a phone number')
       return
     }
-    await onSubmit({
-      name: formData.name,
-      phone: formData.phone,
-      email: formData.email || undefined,
-      type: formData.type,
-      creditLimit: formData.creditLimit ? parseFloat(formData.creditLimit) : undefined,
-    })
-    setFormData(initialCustomerForm)
-    setOpen(false)
+
+    setIsSubmitting(true)
+    try {
+      if (mode === 'edit' && initialData && onUpdate) {
+        await onUpdate(initialData.id, {
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email || undefined,
+          type: formData.type,
+          creditLimit: formData.creditLimit ? parseFloat(formData.creditLimit) : undefined,
+        })
+      } else {
+        await onSubmit({
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email || undefined,
+          type: formData.type,
+          creditLimit: formData.creditLimit ? parseFloat(formData.creditLimit) : undefined,
+        })
+      }
+      setOpen(false)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
+
+  const isEdit = mode === 'edit'
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add New Credit Customer</DialogTitle>
-          <DialogDescription>Create a new customer account for credit sales</DialogDescription>
+          <DialogTitle>{isEdit ? 'Edit Credit Customer' : 'Add New Credit Customer'}</DialogTitle>
+          <DialogDescription>
+            {isEdit ? 'Update customer details' : 'Create a new customer account for credit sales'}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
@@ -117,16 +156,18 @@ export function CustomerFormDialog({ onSubmit, trigger }: CustomerFormDialogProp
                 type="number"
                 value={formData.creditLimit}
                 onChange={(e) => setFormData({ ...formData, creditLimit: e.target.value })}
-                placeholder="0.00"
+                placeholder="No limit"
               />
             </div>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit}>Add Customer</Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Customer'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

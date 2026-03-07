@@ -11,11 +11,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { CreditCard, Phone, Mail, FileText } from 'lucide-react'
+import { CreditCard, Phone, Mail, FileText, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LedgerDialog } from './ledger-dialog'
 import { SettlementDialog } from './settlement-dialog'
-import type { CreditCustomerWithBalance, CreateSettlementDto } from '@/types'
+import { CustomerFormDialog } from './customer-form-dialog'
+import type { CreditCustomerWithBalance, CreateSettlementDto, UpdateCreditCustomerDto } from '@/types'
 
 export interface CustomerTableProps {
   customers: CreditCustomerWithBalance[]
@@ -23,6 +24,7 @@ export interface CustomerTableProps {
   isSales: boolean
   searchQuery: string
   onSettlement: (customerId: string, data: CreateSettlementDto) => Promise<void>
+  onUpdate: (id: string, data: UpdateCreditCustomerDto) => Promise<void>
 }
 
 export function CustomerTable({
@@ -31,6 +33,7 @@ export function CustomerTable({
   isSales,
   searchQuery,
   onSettlement,
+  onUpdate,
 }: CustomerTableProps) {
   if (isLoading) {
     return (
@@ -120,6 +123,20 @@ export function CustomerTable({
                         </Button>
                       }
                     />
+                    {!isSales && (
+                      <CustomerFormDialog
+                        mode="edit"
+                        initialData={customer}
+                        onSubmit={async () => {}}
+                        onUpdate={onUpdate}
+                        trigger={
+                          <Button size="sm" variant="outline">
+                            <Pencil className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                        }
+                      />
+                    )}
                     {customer.outstandingBalance > 0 && !isSales && (
                       <SettlementDialog
                         customer={customer}
