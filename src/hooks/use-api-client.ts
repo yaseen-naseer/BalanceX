@@ -166,7 +166,7 @@ export function useApiClient() {
    * DELETE request
    */
   const del = useCallback(
-    <T>(url: string, options?: RequestOptions): Promise<ApiResponse<T>> =>
+    <T>(url: string, options?: RequestOptions & { body?: unknown }): Promise<ApiResponse<T>> =>
       request<T>(url, { ...options, method: "DELETE" }),
     [request]
   )

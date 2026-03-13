@@ -1,15 +1,33 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle2, AlertTriangle, Info } from "lucide-react"
+import { CheckCircle2, AlertTriangle, Info, Pencil } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { CurrencyInput } from "@/components/shared"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { AddTopupDialog } from "@/components/wallet"
 import type { WalletData, VarianceData } from "./types"
+
+const OVERRIDE_REASONS = [
+  "Previous day closing was incorrect",
+  "System balance doesn't match actual",
+  "Balance adjusted by management",
+  "Starting fresh after stock count",
+  "Correcting data entry error",
+] as const
 
 export interface WalletSectionProps {
   wallet: WalletData
@@ -19,7 +37,10 @@ export interface WalletSectionProps {
   totalTopups: number
   currentDate: string
   isReadOnly: boolean
-  onFieldChange: (field: string, value: number) => void
+  walletOpeningSource: string
+  walletOpeningReason: string | null
+  onFieldChange: (field: string, value: number | string) => void
+  onOverrideWalletOpening: (amount: number, reason: string) => void
   onRefreshWallet: () => void
 }
 
@@ -35,9 +56,33 @@ export function WalletSection({
   totalTopups,
   currentDate,
   isReadOnly,
+  walletOpeningSource,
+  walletOpeningReason,
   onFieldChange,
+  onOverrideWalletOpening,
   onRefreshWallet,
 }: WalletSectionProps) {
+  const [showOverride, setShowOverride] = useState(false)
+  const [overrideAmount, setOverrideAmount] = useState("")
+  const [overrideReason, setOverrideReason] = useState("")
+  const [overrideCustomReason, setOverrideCustomReason] = useState("")
+
+  const isManual = walletOpeningSource === "MANUAL"
+  const finalReason = overrideReason === "Other" ? overrideCustomReason.trim() : overrideReason
+
+  const openOverrideDialog = () => {
+    setOverrideAmount(wallet.opening.toString())
+    setOverrideReason("")
+    setOverrideCustomReason("")
+    setShowOverride(true)
+  }
+
+  const handleConfirmOverride = () => {
+    const amount = parseFloat(overrideAmount)
+    if (isNaN(amount) || amount < 0) return
+    onOverrideWalletOpening(amount, finalReason)
+    setShowOverride(false)
+  }
 
   return (
     <Card>
@@ -52,12 +97,27 @@ export function WalletSection({
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="walletOpening">Opening Balance</Label>
-            <CurrencyInput
-              id="walletOpening"
-              value={wallet.opening}
-              onChange={(v) => onFieldChange("wallet.opening", v)}
-              disabled={isReadOnly}
-            />
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex h-9 items-center rounded-md border bg-muted/40 px-3 font-mono text-sm">
+                {wallet.opening.toLocaleString()} MVR
+              </div>
+              {!isReadOnly && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={openOverrideDialog}
+                  title="Override opening balance"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            {isManual && walletOpeningReason && (
+              <p className="text-xs text-amber-600">
+                Manually set — {walletOpeningReason}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Today&apos;s Top-ups</Label>
@@ -191,6 +251,64 @@ export function WalletSection({
           </div>
         </div>
       </CardContent>
+
+      {/* Override Opening Balance Dialog */}
+      <ConfirmDialog
+        open={showOverride}
+        onOpenChange={setShowOverride}
+        title="Override Opening Balance"
+        description="The opening balance is automatically set from the previous day's closing. Provide a reason to override it."
+        confirmLabel="Override"
+        variant="warning"
+        onConfirm={handleConfirmOverride}
+        disableConfirm={!finalReason || !overrideAmount || parseFloat(overrideAmount) < 0}
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>New Opening Balance (MVR) *</Label>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={overrideAmount}
+              onChange={(e) => {
+                if (e.target.value === "" || /^\d*\.?\d*$/.test(e.target.value)) {
+                  setOverrideAmount(e.target.value)
+                }
+              }}
+              placeholder="0.00"
+              className="font-mono"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Reason for override *</Label>
+            <Select
+              value={overrideReason}
+              onValueChange={(v) => {
+                setOverrideReason(v)
+                if (v !== "Other") setOverrideCustomReason("")
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a reason..." />
+              </SelectTrigger>
+              <SelectContent>
+                {OVERRIDE_REASONS.map((reason) => (
+                  <SelectItem key={reason} value={reason}>{reason}</SelectItem>
+                ))}
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            {overrideReason === "Other" && (
+              <Input
+                placeholder="Enter reason..."
+                value={overrideCustomReason}
+                onChange={(e) => setOverrideCustomReason(e.target.value)}
+              />
+            )}
+          </div>
+        </div>
+      </ConfirmDialog>
     </Card>
   )
 }

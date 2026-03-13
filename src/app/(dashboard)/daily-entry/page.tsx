@@ -45,6 +45,7 @@ import {
   CashDrawerSection,
   WalletSection,
   CreditSalesSection,
+  SaleItemsSection,
   SubmissionDialog,
   DailySummaryBar,
   ReopenDialog,
@@ -349,6 +350,13 @@ export default function DailyEntryPage() {
               onValueChange={form.handleValueChange}
               onQuantityChange={form.handleQuantityChange}
               getCategoryTotal={form.getCategoryTotal}
+              dailyEntryId={form.entry?.id ?? null}
+              hasLineItems={form.hasLineItems}
+              getLineItemsForCell={form.getLineItemsForCell}
+              getLineItemCount={form.getLineItemCount}
+              onAddLineItem={form.addLineItem}
+              onDeleteLineItem={form.deleteLineItem}
+              onEnsureDraft={form.saveDraft}
             />
 
             {/* Credit Sales Section */}
@@ -359,6 +367,15 @@ export default function DailyEntryPage() {
               isReadOnly={form.isReadOnly}
               onRefreshEntry={form.refreshEntry}
               onSaveDraft={form.saveDraft}
+            />
+
+            {/* Sale Line Items (collapsible) */}
+            <SaleItemsSection
+              lineItems={form.saleLineItems}
+              isLoading={form.saleLineItemsLoading}
+              isReadOnly={form.isReadOnly}
+              onEditLineItem={form.editLineItem}
+              onDeleteLineItem={form.deleteLineItem}
             />
 
             {/* Wallet & Cash Reconciliation */}
@@ -372,7 +389,10 @@ export default function DailyEntryPage() {
                 totalTopups={form.totalTopups}
                 currentDate={currentDate}
                 isReadOnly={form.isReadOnly}
+                walletOpeningSource={form.walletOpeningSource}
+                walletOpeningReason={form.walletOpeningReason}
                 onFieldChange={form.handleFieldChange}
+                onOverrideWalletOpening={form.overrideWalletOpening}
                 onRefreshWallet={form.refreshWallet}
               />
 

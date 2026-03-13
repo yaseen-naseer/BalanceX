@@ -23,6 +23,8 @@ export {
   updateCreditCustomerSchema,
   // Credit Sale Schemas
   createCreditSaleSchema,
+  // Sale Line Item Schemas
+  createSaleLineItemSchema,
   // Settlement Schema
   createSettlementSchema,
   // Bank Transaction Schemas

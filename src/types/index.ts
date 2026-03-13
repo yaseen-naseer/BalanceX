@@ -23,6 +23,7 @@ export type {
   BankTransactionType,
   WalletTopupSource,
   WalletOpeningSource,
+  SaleLineItem,
 } from "@prisma/client"
 
 // API Response types
@@ -72,6 +73,7 @@ export interface DailyEntryWithRelations {
   creditSales: Array<{
     id: string
     customerId: string
+    category: "DHIRAAGU_BILLS" | "RETAIL_RELOAD" | "WHOLESALE_RELOAD" | "SIM" | "USIM"
     amount: number
     reference: string | null
     customer: {
@@ -195,6 +197,31 @@ export interface CreateWalletTopupDto {
   source: "CASH" | "BANK"
   notes?: string
   date: string // ISO date string
+}
+
+// Sale Line Item types
+export interface SaleLineItemData {
+  id: string
+  dailyEntryId: string
+  category: "DHIRAAGU_BILLS" | "RETAIL_RELOAD" | "WHOLESALE_RELOAD" | "SIM" | "USIM"
+  customerType: "CONSUMER" | "CORPORATE"
+  paymentMethod: "CASH" | "TRANSFER"
+  amount: number
+  serviceNumber: string | null
+  note: string | null
+  timestamp: string
+  createdBy: string
+  createdAt: string
+}
+
+export interface CreateSaleLineItemDto {
+  dailyEntryId: string
+  category: "DHIRAAGU_BILLS" | "RETAIL_RELOAD" | "WHOLESALE_RELOAD" | "SIM" | "USIM"
+  customerType: "CONSUMER" | "CORPORATE"
+  paymentMethod: "CASH" | "TRANSFER"
+  amount: number
+  serviceNumber?: string | null
+  note?: string | null
 }
 
 // Dashboard types

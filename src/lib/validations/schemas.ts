@@ -100,6 +100,7 @@ export const createCreditSaleSchema = z.object({
   amount: positiveNumberSchema,
   reference: z.string().max(100).optional().nullable(),
   customerType: customerTypeSchema.optional(),
+  category: z.enum(["DHIRAAGU_BILLS", "WHOLESALE_RELOAD"]).optional().default("DHIRAAGU_BILLS"),
   overrideLimit: z.boolean().optional(),
 })
 
@@ -286,6 +287,20 @@ export const verifyScreenshotSchema = z.object({
   id: z.string().cuid("Invalid screenshot ID"),
   verified: z.boolean(),
   notes: z.string().max(500).optional().nullable(),
+})
+
+// ============================================
+// Sale Line Item Schemas
+// ============================================
+
+export const createSaleLineItemSchema = z.object({
+  dailyEntryId: z.string().cuid("Invalid daily entry ID"),
+  category: categoryTypeSchema,
+  customerType: customerTypeSchema,
+  paymentMethod: paymentMethodSchema,
+  amount: positiveNumberSchema,
+  serviceNumber: z.string().max(50).optional().nullable(),
+  note: z.string().max(500).optional().nullable(),
 })
 
 // ============================================

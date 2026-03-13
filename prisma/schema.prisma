@@ -41,6 +41,7 @@ model User {
   telcoScreenshots      TelcoScreenshot[]
   amendmentsReopened    DailyEntryAmendment[] @relation("AmendmentReopener")
   amendmentsResubmitted DailyEntryAmendment[] @relation("AmendmentResubmitter")
+  saleLineItems         SaleLineItem[]
 
   @@map("users")
 }
@@ -70,10 +71,11 @@ model DailyEntry {
   wallet      DailyEntryWallet?
   categories  DailyEntryCategory[]
   notes       DailyEntryNotes?
-  creditSales CreditSale[]
-  screenshot  TelcoScreenshot?
-  cashFloat   CashFloatLog?
-  amendments  DailyEntryAmendment[]
+  creditSales   CreditSale[]
+  saleLineItems SaleLineItem[]
+  screenshot    TelcoScreenshot?
+  cashFloat     CashFloatLog?
+  amendments    DailyEntryAmendment[]
 
   @@map("daily_entries")
 }
@@ -202,12 +204,13 @@ model CreditCustomer {
 // 8. CREDIT SALE - Individual credit sale linked to daily entry
 // ============================================
 model CreditSale {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
   dailyEntryId String
   customerId   String
-  amount       Decimal  @db.Decimal(12, 2)
+  category     CategoryType @default(DHIRAAGU_BILLS)
+  amount       Decimal      @db.Decimal(12, 2)
   reference    String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime     @default(now())
 
   // Relations
   dailyEntry DailyEntry     @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
@@ -415,6 +418,9 @@ enum AuditAction {
   WALLET_TOPUP_DELETED
   USER_CREATED
   USER_DEACTIVATED
+  SALE_LINE_ITEM_ADDED
+  SALE_LINE_ITEM_EDITED
+  SALE_LINE_ITEM_DELETED
 }
 
 model AuditLog {
@@ -511,4 +517,28 @@ model DailyEntryAmendment {
 
   @@index([dailyEntryId])
   @@map("daily_entry_amendments")
+}
+
+// ============================================
+// 19. SALE LINE ITEM - Individual sale transactions per category cell
+// ============================================
+model SaleLineItem {
+  id            String        @id @default(cuid())
+  dailyEntryId  String
+  category      CategoryType
+  customerType  CustomerType
+  paymentMethod PaymentMethod
+  amount        Decimal       @db.Decimal(12, 2)
+  serviceNumber String?
+  note          String?       @db.Text
+  timestamp     DateTime      @default(now())
+  createdBy     String
+  createdAt     DateTime      @default(now())
+
+  // Relations
+  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [createdBy], references: [id])
+
+  @@index([dailyEntryId, category, customerType, paymentMethod])
+  @@map("sale_line_items")
 }

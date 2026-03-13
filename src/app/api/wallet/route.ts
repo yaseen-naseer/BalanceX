@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         orderBy: { date: "desc" },
       })
 
-      if (previousEntry?.wallet) {
+      if (previousEntry?.wallet && Number(previousEntry.wallet.closingActual) > 0) {
         return NextResponse.json({
           success: true,
           data: {
@@ -47,17 +47,42 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      // No prior entries at all — fall back to wallet settings opening balance
+      // No usable previous closing — calculate the running balance up to the target date
+      // This matches the wallet page's currentBalance calculation
       const settings = await prisma.walletSettings.findFirst({
         orderBy: { openingDate: "desc" },
       })
+      const openingBalance = settings ? Number(settings.openingBalance) : 0
+
+      // All top-ups before the target date
+      const topups = await prisma.walletTopup.findMany({
+        where: { date: { lt: targetDate } },
+      })
+      const totalTopups = topups.reduce((sum, t) => sum + Number(t.amount), 0)
+
+      // All reload sales before the target date
+      const reloadCategories = await prisma.dailyEntryCategory.findMany({
+        where: {
+          category: { in: ["RETAIL_RELOAD", "WHOLESALE_RELOAD"] },
+          dailyEntry: { date: { lt: targetDate } },
+        },
+      })
+      const totalReloadSales = reloadCategories.reduce(
+        (sum, cat) =>
+          sum +
+          Number(cat.consumerCash) + Number(cat.consumerTransfer) + Number(cat.consumerCredit) +
+          Number(cat.corporateCash) + Number(cat.corporateTransfer) + Number(cat.corporateCredit),
+        0
+      )
+
+      const calculatedBalance = openingBalance + totalTopups - totalReloadSales
 
       return NextResponse.json({
         success: true,
         data: {
-          previousClosing: settings ? Number(settings.openingBalance) : 0,
-          previousDate: null,
-          source: "INITIAL_SETUP",
+          previousClosing: calculatedBalance,
+          previousDate: previousEntry?.date?.toISOString() || null,
+          source: previousEntry ? "PREVIOUS_DAY" : "INITIAL_SETUP",
         },
       })
     } catch (error) {

@@ -15,6 +15,9 @@ export type { WalletSectionProps } from "./wallet-section"
 export { CreditSalesSection } from "./credit-sales-section"
 export type { CreditSalesSectionProps } from "./credit-sales-section"
 
+export { SaleItemsSection } from "./sale-items-section"
+export type { SaleItemsSectionProps } from "./sale-items-section"
+
 export { SubmissionDialog } from "./submission-dialog"
 export type { SubmissionDialogProps } from "./submission-dialog"
 

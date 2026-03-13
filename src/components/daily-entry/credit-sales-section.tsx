@@ -1,7 +1,5 @@
 "use client"
 
-"use client"
-
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Users, Trash2 } from "lucide-react"
+import { Users, Trash2, ChevronDown, ChevronUp } from "lucide-react"
 import { toast } from "sonner"
 import { CreditSaleDialog } from "@/components/credit/credit-sale-dialog"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
@@ -37,6 +35,7 @@ export function CreditSalesSection({
   onRefreshEntry,
   onSaveDraft,
 }: CreditSalesSectionProps) {
+  const [expanded, setExpanded] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<{
     id: string
     customerName: string
@@ -79,23 +78,38 @@ export function CreditSalesSection({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <div>
+        <div
+          className="flex-1 cursor-pointer select-none"
+          onClick={() => setExpanded(!expanded)}
+        >
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
             Credit Sales
+            {hasSales && (
+              <Badge variant="secondary" className="text-xs">
+                {entry!.creditSales.length}
+              </Badge>
+            )}
           </CardTitle>
-          <CardDescription>
-            Linked credit sales — amounts auto-fill the Dhiraagu Bills credit columns
-          </CardDescription>
         </div>
-        <CreditSaleDialog
-          dailyEntryId={entry?.id || null}
-          onSaleAdded={() => onRefreshEntry()}
-          onSaveDraft={onSaveDraft}
-          disabled={isReadOnly}
-        />
+        <div className="flex items-center gap-1">
+          <CreditSaleDialog
+            dailyEntryId={entry?.id || null}
+            onSaleAdded={() => onRefreshEntry()}
+            onSaveDraft={onSaveDraft}
+            disabled={isReadOnly}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </div>
       </CardHeader>
-      <CardContent>
+      {expanded && <CardContent>
         {hasSales ? (
           <div className="space-y-3">
             {entry!.creditSales.map((sale) => (
@@ -112,6 +126,9 @@ export function CreditSalesSection({
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Badge variant="outline" className="text-xs">
                         {sale.customer.type === "CORPORATE" ? "Corporate" : "Consumer"}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {sale.category === "WHOLESALE_RELOAD" ? "Wholesale" : "Bills"}
                       </Badge>
                       {sale.reference && <span>Ref: {sale.reference}</span>}
                     </div>
@@ -167,7 +184,7 @@ export function CreditSalesSection({
             </p>
           </div>
         )}
-      </CardContent>
+      </CardContent>}
 
       <ConfirmDialog
         open={!!pendingDelete}

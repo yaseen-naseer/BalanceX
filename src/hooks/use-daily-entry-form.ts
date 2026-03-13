@@ -4,8 +4,9 @@ import { useState, useCallback, useEffect, useMemo } from "react"
 import { useDailyEntry, type CalculationData } from "./use-daily-entry"
 import { useWallet } from "./use-wallet"
 import { useAuth } from "./use-auth"
+import { useSaleLineItems } from "./use-sale-line-items"
 import { canEditDailyEntry } from "@/lib/permissions"
-import type { DailyEntryWithRelations, CreateDailyEntryDto, UpdateDailyEntryDto } from "@/types"
+import type { DailyEntryWithRelations, CreateDailyEntryDto, UpdateDailyEntryDto, SaleLineItemData, CreateSaleLineItemDto } from "@/types"
 import {
   type Category,
   type CustomerType,
@@ -49,24 +50,32 @@ function entryToLocalData(entry: DailyEntryWithRelations | null): LocalEntryData
 
   const data = createEmptyLocalData()
 
-  // Derive credit from linked credit sales (not from stored category values)
-  const consumerCredit = entry.creditSales
-    ?.filter((s) => s.customer.type === 'CONSUMER')
-    .reduce((sum, s) => sum + Number(s.amount), 0) ?? 0
-  const corporateCredit = entry.creditSales
-    ?.filter((s) => s.customer.type === 'CORPORATE')
-    .reduce((sum, s) => sum + Number(s.amount), 0) ?? 0
+  // Derive credit from linked credit sales, grouped by category and customer type
+  const creditByCategory = new Map<string, { consumer: number; corporate: number }>()
+  const creditCategories = ['DHIRAAGU_BILLS', 'WHOLESALE_RELOAD']
+  for (const cat of creditCategories) {
+    creditByCategory.set(cat, { consumer: 0, corporate: 0 })
+  }
+  entry.creditSales?.forEach((s) => {
+    const cat = s.category || 'DHIRAAGU_BILLS'
+    const existing = creditByCategory.get(cat)
+    if (existing) {
+      if (s.customer.type === 'CONSUMER') existing.consumer += Number(s.amount)
+      else existing.corporate += Number(s.amount)
+    }
+  })
 
   entry.categories?.forEach((cat) => {
     const isDhiraagu = cat.category === 'DHIRAAGU_BILLS'
+    const creditData = creditByCategory.get(cat.category)
     data.categories[cat.category] = {
       consumerCash: Number(cat.consumerCash),
       consumerTransfer: Number(cat.consumerTransfer),
-      // Credit values are always derived from linked credit sales
-      consumerCredit: isDhiraagu ? consumerCredit : 0,
+      // Credit values are derived from linked credit sales per category
+      consumerCredit: creditData ? creditData.consumer : 0,
       corporateCash: isDhiraagu ? Number(cat.corporateCash) : 0,
       corporateTransfer: isDhiraagu ? Number(cat.corporateTransfer) : 0,
-      corporateCredit: isDhiraagu ? corporateCredit : 0,
+      corporateCredit: isDhiraagu && creditData ? creditData.corporate : 0,
       quantity: Number(cat.quantity),
     }
   })
@@ -137,11 +146,26 @@ export interface UseDailyEntryFormReturn {
   isReadOnly: boolean
   editPermission: { canEdit: boolean; reason?: string }
 
+  // Wallet opening override
+  walletOpeningSource: string
+  walletOpeningReason: string | null
+  overrideWalletOpening: (amount: number, reason: string) => void
+
   // Handlers
   handleValueChange: (category: Category, customerType: CustomerType, paymentMethod: PaymentMethod, value: number) => void
   handleQuantityChange: (category: Category, value: number) => void
   handleFieldChange: (field: string, value: number | string) => void
   getCategoryTotal: (category: Category) => number
+
+  // Sale line items
+  saleLineItems: SaleLineItemData[]
+  saleLineItemsLoading: boolean
+  hasLineItems: (category: string, customerType: string, paymentMethod: string) => boolean
+  getLineItemsForCell: (category: string, customerType: string, paymentMethod: string) => SaleLineItemData[]
+  getLineItemCount: (category: string, customerType: string, paymentMethod: string) => number
+  addLineItem: (data: CreateSaleLineItemDto) => Promise<{ success: boolean; cellTotal?: number; cellCount?: number }>
+  editLineItem: (id: string, data: { amount?: number; serviceNumber?: string | null; note?: string | null; reason: string }) => Promise<{ success: boolean; cellTotal?: number; cellCount?: number }>
+  deleteLineItem: (id: string, reason?: string) => Promise<{ success: boolean; cellTotal?: number; cellCount?: number }>
 
   // Amendment data
   amendments: NonNullable<DailyEntryWithRelations['amendments']>
@@ -178,12 +202,27 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
 
   const { user } = useAuth()
 
+  // Sale line items
+  const {
+    lineItems: saleLineItems,
+    isLoading: saleLineItemsLoading,
+    hasLineItems,
+    getLineItemsForCell,
+    getLineItemCount,
+    addLineItem: addLineItemApi,
+    editLineItem: editLineItemApi,
+    deleteLineItem: deleteLineItemApi,
+    refreshLineItems,
+  } = useSaleLineItems(entry?.id ?? null)
+
   // Form state
   const [localData, setLocalData] = useState<LocalEntryData>(createEmptyLocalData())
   const [isSaving, setIsSaving] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [walletAutoLoaded, setWalletAutoLoaded] = useState(false)
   const [hasUserChanges, setHasUserChanges] = useState(false)
+  const [walletOpeningSource, setWalletOpeningSource] = useState<string>("PREVIOUS_DAY")
+  const [walletOpeningReason, setWalletOpeningReason] = useState<string | null>(null)
 
   // Check edit permissions
   const editPermission = useMemo(() => {
@@ -198,6 +237,8 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     setLocalData(entryToLocalData(entry))
     setHasUserChanges(false)
     setWalletAutoLoaded(false)
+    setWalletOpeningSource(entry?.wallet?.openingSource || "PREVIOUS_DAY")
+    setWalletOpeningReason(null)
   }, [entry])
 
   // Fetch entry when date changes
@@ -384,6 +425,93 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     })
   }, [])
 
+  // Override wallet opening balance with reason
+  const overrideWalletOpening = useCallback((amount: number, reason: string) => {
+    setLocalData((prev) => ({
+      ...prev,
+      wallet: { ...prev.wallet, opening: amount },
+    }))
+    setWalletOpeningSource("MANUAL")
+    setWalletOpeningReason(reason)
+    setHasUserChanges(true)
+  }, [])
+
+  // Add line item and update local form data
+  const addLineItem = useCallback(
+    async (data: CreateSaleLineItemDto) => {
+      const result = await addLineItemApi(data)
+      if (result.success && result.cellTotal !== undefined) {
+        // Update local form data to reflect new cell total
+        const ctKey = data.customerType.toLowerCase() as CustomerType
+        const pmKey = data.paymentMethod.toLowerCase() as PaymentMethod
+        const fieldKey = `${ctKey}${pmKey.charAt(0).toUpperCase() + pmKey.slice(1)}` as keyof LocalEntryData["categories"][Category]
+        setLocalData((prev) => ({
+          ...prev,
+          categories: {
+            ...prev.categories,
+            [data.category]: {
+              ...prev.categories[data.category as Category],
+              [fieldKey]: result.cellTotal,
+            },
+          },
+        }))
+      }
+      return result
+    },
+    [addLineItemApi]
+  )
+
+  // Edit line item and update local form data
+  const editLineItem = useCallback(
+    async (id: string, data: { amount?: number; serviceNumber?: string | null; note?: string | null; reason: string }) => {
+      const item = saleLineItems.find((li) => li.id === id)
+      const result = await editLineItemApi(id, data)
+      if (result.success && result.cellTotal !== undefined && item) {
+        const ctKey = item.customerType.toLowerCase() as CustomerType
+        const pmKey = item.paymentMethod.toLowerCase() as PaymentMethod
+        const fieldKey = `${ctKey}${pmKey.charAt(0).toUpperCase() + pmKey.slice(1)}` as keyof LocalEntryData["categories"][Category]
+        setLocalData((prev) => ({
+          ...prev,
+          categories: {
+            ...prev.categories,
+            [item.category]: {
+              ...prev.categories[item.category as Category],
+              [fieldKey]: result.cellTotal,
+            },
+          },
+        }))
+      }
+      return result
+    },
+    [editLineItemApi, saleLineItems]
+  )
+
+  // Delete line item and update local form data
+  const deleteLineItem = useCallback(
+    async (id: string, reason?: string) => {
+      // Find the line item to know which cell to update
+      const item = saleLineItems.find((li) => li.id === id)
+      const result = await deleteLineItemApi(id, reason)
+      if (result.success && result.cellTotal !== undefined && item) {
+        const ctKey = item.customerType.toLowerCase() as CustomerType
+        const pmKey = item.paymentMethod.toLowerCase() as PaymentMethod
+        const fieldKey = `${ctKey}${pmKey.charAt(0).toUpperCase() + pmKey.slice(1)}` as keyof LocalEntryData["categories"][Category]
+        setLocalData((prev) => ({
+          ...prev,
+          categories: {
+            ...prev.categories,
+            [item.category]: {
+              ...prev.categories[item.category as Category],
+              [fieldKey]: result.cellTotal,
+            },
+          },
+        }))
+      }
+      return result
+    },
+    [deleteLineItemApi, saleLineItems]
+  )
+
   // Get category total
   const getCategoryTotal = useCallback(
     (category: Category) => {
@@ -404,7 +532,7 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
         category: cat.key,
         consumerCash: localData.categories[cat.key].consumerCash,
         consumerTransfer: localData.categories[cat.key].consumerTransfer,
-        consumerCredit: cat.key === 'DHIRAAGU_BILLS' ? localData.categories[cat.key].consumerCredit : 0,
+        consumerCredit: ['DHIRAAGU_BILLS', 'WHOLESALE_RELOAD'].includes(cat.key) ? localData.categories[cat.key].consumerCredit : 0,
         corporateCash: cat.key === 'DHIRAAGU_BILLS' ? localData.categories[cat.key].corporateCash : 0,
         corporateTransfer: cat.key === 'DHIRAAGU_BILLS' ? localData.categories[cat.key].corporateTransfer : 0,
         corporateCredit: cat.key === 'DHIRAAGU_BILLS' ? localData.categories[cat.key].corporateCredit : 0,
@@ -417,11 +545,12 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
       },
       wallet: {
         opening: localData.wallet.opening,
+        openingSource: walletOpeningSource as "PREVIOUS_DAY" | "INITIAL_SETUP" | "MANUAL",
         closingActual: localData.wallet.closingActual,
       },
       notes: localData.notes || undefined,
     }
-  }, [date, localData])
+  }, [date, localData, walletOpeningSource])
 
   // Validate before submit
   const validateBeforeSubmit = useCallback((): ValidationResult => {
@@ -532,7 +661,8 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   // Refresh functions
   const refreshEntry = useCallback(async () => {
     await fetchEntry(date)
-  }, [fetchEntry, date])
+    await refreshLineItems()
+  }, [fetchEntry, date, refreshLineItems])
 
   const refreshWallet = useCallback(() => {
     fetchWallet()
@@ -571,6 +701,16 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     linkedConsumerCreditTotal,
     linkedCorporateCreditTotal,
 
+    // Sale line items
+    saleLineItems,
+    saleLineItemsLoading,
+    hasLineItems,
+    getLineItemsForCell,
+    getLineItemCount,
+    addLineItem,
+    editLineItem,
+    deleteLineItem,
+
     // Amendment data
     amendments,
 
@@ -583,6 +723,11 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     isSubmitted,
     isReadOnly,
     editPermission,
+
+    // Wallet opening override
+    walletOpeningSource,
+    walletOpeningReason,
+    overrideWalletOpening,
 
     // Handlers
     handleValueChange,

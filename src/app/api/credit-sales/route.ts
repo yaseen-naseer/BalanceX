@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     // Validate request body
     const validation = await validateRequestBody(request, createCreditSaleSchema)
     if ("error" in validation) return validation.error
-    const { dailyEntryId, customerId, amount, reference, overrideLimit } = validation.data
+    const { dailyEntryId, customerId, amount, reference, category, overrideLimit } = validation.data
 
     // Get customer details for credit limit check
     const customer = await prisma.creditCustomer.findUnique({
@@ -119,6 +119,7 @@ export async function POST(request: NextRequest) {
       data: {
         dailyEntryId,
         customerId,
+        category: category || "DHIRAAGU_BILLS",
         amount,
         reference: reference || null,
       },

@@ -15,12 +15,24 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useAuth } from '@/hooks/use-auth'
 import type { CreditCustomerWithBalance, CreateCreditCustomerDto } from '@/types'
 import { CustomerSelector } from './customer-selector'
 import { CustomerInfoCard } from './customer-info-card'
 import { LimitWarningDialog, type LimitWarningData } from './limit-warning-dialog'
 import { CustomerFormDialog } from './customer-form-dialog'
+
+const CREDIT_CATEGORIES = [
+  { value: 'DHIRAAGU_BILLS', label: 'Dhiraagu Bills' },
+  { value: 'WHOLESALE_RELOAD', label: 'Wholesale Reload' },
+] as const
 
 interface CreditSaleDialogProps {
   dailyEntryId: string | null
@@ -40,6 +52,7 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
   const [selectedCustomer, setSelectedCustomer] = useState<CreditCustomerWithBalance | null>(null)
   const [amount, setAmount] = useState('')
   const [reference, setReference] = useState('')
+  const [category, setCategory] = useState<'DHIRAAGU_BILLS' | 'WHOLESALE_RELOAD'>('DHIRAAGU_BILLS')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [limitWarningData, setLimitWarningData] = useState<LimitWarningData | null>(null)
@@ -95,6 +108,7 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
     setSelectedCustomer(null)
     setAmount('')
     setReference('')
+    setCategory('DHIRAAGU_BILLS')
     setSearchQuery('')
   }
 
@@ -176,6 +190,7 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
           amount: parseFloat(amount),
           reference: reference || null,
           customerType: selectedCustomer.type,
+          category,
           overrideLimit,
         }),
       })
@@ -224,12 +239,27 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
           <DialogHeader>
             <DialogTitle>Add Credit Sale</DialogTitle>
             <DialogDescription>
-              Record a credit sale for a customer. This will be added to the Dhiraagu Bills
-              category.
+              Record a credit sale for a customer. The amount will be added to the selected category&apos;s credit column.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Category *</Label>
+              <Select value={category} onValueChange={(v) => setCategory(v as 'DHIRAAGU_BILLS' | 'WHOLESALE_RELOAD')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CREDIT_CATEGORIES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Customer *</Label>
