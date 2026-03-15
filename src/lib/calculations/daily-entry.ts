@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import type { CategoryType } from '@prisma/client'
+import { stripRetailGst } from '@/lib/utils/balance'
 
 /**
  * Calculate total cash sales from categories
@@ -14,7 +15,9 @@ export function calculateTotalCashSales(
 }
 
 /**
- * Calculate total reload sales from categories
+ * Calculate total reload wallet cost from categories.
+ * Retail reload: strips 8% GST (customer pays 108, wallet cost = 100).
+ * Wholesale reload: full amount deducted from wallet.
  */
 export function calculateReloadSales(
   categories: Array<{
@@ -25,23 +28,28 @@ export function calculateReloadSales(
     corporateCash: unknown
     corporateTransfer: unknown
     corporateCredit: unknown
-  }>
+  }>,
+  wholesaleReloadFromLineItems?: number
 ): number {
-  const reloadCategories = categories.filter(
-    (cat) => cat.category === 'RETAIL_RELOAD' || cat.category === 'WHOLESALE_RELOAD'
-  )
-
-  return reloadCategories.reduce(
-    (sum, cat) =>
-      sum +
-      Number(cat.consumerCash) +
-      Number(cat.consumerTransfer) +
-      Number(cat.consumerCredit) +
-      Number(cat.corporateCash) +
-      Number(cat.corporateTransfer) +
-      Number(cat.corporateCredit),
-    0
-  )
+  let total = 0
+  for (const cat of categories) {
+    if (cat.category === 'RETAIL_RELOAD') {
+      const catTotal =
+        Number(cat.consumerCash) +
+        Number(cat.consumerTransfer) +
+        Number(cat.consumerCredit) +
+        Number(cat.corporateCash) +
+        Number(cat.corporateTransfer) +
+        Number(cat.corporateCredit)
+      total += stripRetailGst(catTotal)
+    }
+    // Wholesale: category grid stores cash received, not wallet cost
+    // Wallet cost comes from line items
+  }
+  if (wholesaleReloadFromLineItems != null) {
+    total += wholesaleReloadFromLineItems
+  }
+  return Math.round(total * 100) / 100
 }
 
 /**
@@ -146,7 +154,13 @@ export async function recalculateEntryValues(entryId: string): Promise<void> {
 
   // Calculate totals
   const totalCashSales = calculateTotalCashSales(entry.categories)
-  const totalReloadSales = calculateReloadSales(entry.categories)
+  // Wholesale wallet cost from line items (category grid stores cash received)
+  const wholesaleLineItemAgg = await prisma.saleLineItem.aggregate({
+    where: { dailyEntryId: entryId, category: 'WHOLESALE_RELOAD' },
+    _sum: { amount: true },
+  })
+  const wholesaleReload = Number(wholesaleLineItemAgg._sum.amount ?? 0)
+  const totalReloadSales = calculateReloadSales(entry.categories, wholesaleReload)
 
   // Update cash drawer
   if (entry.cashDrawer) {

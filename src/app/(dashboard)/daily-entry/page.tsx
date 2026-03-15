@@ -30,6 +30,7 @@ import {
   Lock,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
+import { useWholesaleCustomers } from '@/hooks/use-wholesale-customers'
 import { canReopenDailyEntry } from '@/lib/permissions'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -86,6 +87,7 @@ export default function DailyEntryPage() {
 
   // Use the extracted form hook
   const form = useDailyEntryForm({ date: currentDate })
+  const wholesale = useWholesaleCustomers()
 
   // Guard unsaved changes on navigation and date changes
   const { showDialog: showUnsavedDialog, guard, handleLeave, handleSaveAndLeave, handleStay } =
@@ -357,6 +359,13 @@ export default function DailyEntryPage() {
               onAddLineItem={form.addLineItem}
               onDeleteLineItem={form.deleteLineItem}
               onEnsureDraft={form.saveDraft}
+              wholesaleCustomers={wholesale.customers}
+              wholesaleSearch={wholesale.search}
+              onWholesaleSearchChange={wholesale.setSearch}
+              onCreateWholesaleCustomer={wholesale.createCustomer}
+              getDiscount={wholesale.getDiscount}
+              calculateReload={wholesale.calculateReload}
+              minCashAmount={wholesale.minCashAmount}
             />
 
             {/* Credit Sales Section */}

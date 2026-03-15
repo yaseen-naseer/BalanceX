@@ -19,6 +19,7 @@ import {
   CashFloatSettingsSection,
   ShiftSettingsSection,
   AuditLogSection,
+  WholesaleTiersSection,
 } from '@/components/settings'
 
 export default function SettingsPage() {
@@ -232,6 +233,9 @@ export default function SettingsPage() {
 
         {/* Cash Float Settings (Owner Only) */}
         {isOwner && <CashFloatSettingsSection isOwner={isOwner} />}
+
+        {/* Wholesale Discount Tiers (Owner Only) */}
+        {isOwner && <WholesaleTiersSection isOwner={isOwner} />}
 
         {/* Shift Settings (Owner Only) */}
         {isOwner && <ShiftSettingsSection isOwner={isOwner} />}

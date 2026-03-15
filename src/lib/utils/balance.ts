@@ -89,7 +89,22 @@ interface WalletCategoryLike {
 }
 
 /**
- * Calculate total reload sales from wallet categories
+ * Retail reload GST rate (8%).
+ * Retail reload prices include GST — the wallet cost is the price excluding GST.
+ * e.g. customer pays 108 MVR → wallet deduction = 100 MVR (108 / 1.08).
+ */
+export const RETAIL_RELOAD_GST_RATE = 0.08
+
+/**
+ * Strip GST from a retail reload sale amount to get the wallet cost.
+ */
+export function stripRetailGst(amount: number): number {
+  return Math.round((amount / (1 + RETAIL_RELOAD_GST_RATE)) * 100) / 100
+}
+
+/**
+ * Calculate total reload sales from wallet categories (simple sum, no GST adjustment).
+ * @deprecated Use calculateReloadWalletCost for wallet balance calculations.
  */
 export function calculateReloadSales(categories: WalletCategoryLike[]): number {
   return categories.reduce(
@@ -104,3 +119,59 @@ export function calculateReloadSales(categories: WalletCategoryLike[]): number {
     0
   )
 }
+
+export interface WalletCategoryWithType {
+  category: string
+  consumerCash: Decimal | number | string | unknown
+  consumerTransfer: Decimal | number | string | unknown
+  consumerCredit: Decimal | number | string | unknown
+  corporateCash: Decimal | number | string | unknown
+  corporateTransfer: Decimal | number | string | unknown
+  corporateCredit: Decimal | number | string | unknown
+}
+
+/**
+ * Sum all payment fields for a single category record.
+ */
+function sumCategoryFields(cat: WalletCategoryWithType): number {
+  return (
+    Number(cat.consumerCash) +
+    Number(cat.consumerTransfer) +
+    Number(cat.consumerCredit) +
+    Number(cat.corporateCash) +
+    Number(cat.corporateTransfer) +
+    Number(cat.corporateCredit)
+  )
+}
+
+/**
+ * Calculate the actual wallet cost for reload sales.
+ * Retail reload: strips 8% GST (customer pays 108, wallet deduction = 100).
+ * Wholesale reload: uses line items' reload amount (amount field), NOT the category grid
+ *   (category grid stores cash received for wholesale).
+ * @param wholesaleReloadFromLineItems - pre-calculated wholesale reload total from line items
+ */
+export function calculateReloadWalletCost(
+  categories: WalletCategoryWithType[],
+  wholesaleReloadFromLineItems?: number
+): number {
+  let total = 0
+  for (const cat of categories) {
+    if (cat.category === "WHOLESALE_RELOAD") {
+      // Use line item reload sum if provided, otherwise skip (grid has cash amounts)
+      if (wholesaleReloadFromLineItems != null) {
+        total += wholesaleReloadFromLineItems
+      }
+      // If not provided, we skip wholesale — caller must provide it
+    } else {
+      const catTotal = sumCategoryFields(cat)
+      if (cat.category === "RETAIL_RELOAD") {
+        total += stripRetailGst(catTotal)
+      } else {
+        total += catTotal
+      }
+    }
+  }
+  return Math.round(total * 100) / 100
+}
+

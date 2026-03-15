@@ -7,6 +7,7 @@ import { successResponse, ApiErrors } from "@/lib/api-response"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 import type { CategoryType, CustomerType, PaymentMethod } from "@prisma/client"
+import { getWalletDeduction, checkWalletSufficiency } from "@/lib/utils/wallet-check"
 
 /**
  * Maps (customerType, paymentMethod) to the DailyEntryCategory field name.
@@ -28,11 +29,23 @@ async function syncCellTotal(
   customerType: CustomerType,
   paymentMethod: PaymentMethod
 ): Promise<number> {
-  const agg = await prisma.saleLineItem.aggregate({
-    where: { dailyEntryId, category, customerType, paymentMethod },
-    _sum: { amount: true },
-  })
-  const total = Number(agg._sum.amount ?? 0)
+  // For wholesale reload: grid shows cash received (cashAmount), not reload amount
+  // For all others: grid shows the sale amount
+  let total: number
+  if (category === "WHOLESALE_RELOAD") {
+    // Sum cashAmount where available, fall back to amount
+    const items = await prisma.saleLineItem.findMany({
+      where: { dailyEntryId, category, customerType, paymentMethod },
+      select: { amount: true, cashAmount: true },
+    })
+    total = items.reduce((sum, item) => sum + Number(item.cashAmount ?? item.amount), 0)
+  } else {
+    const agg = await prisma.saleLineItem.aggregate({
+      where: { dailyEntryId, category, customerType, paymentMethod },
+      _sum: { amount: true },
+    })
+    total = Number(agg._sum.amount ?? 0)
+  }
 
   const fieldName = getCategoryFieldName(customerType, paymentMethod)
 
@@ -66,6 +79,11 @@ export async function GET(request: NextRequest) {
     const items = await prisma.saleLineItem.findMany({
       where: { dailyEntryId },
       orderBy: { timestamp: "asc" },
+      include: {
+        wholesaleCustomer: {
+          select: { id: true, name: true, phone: true, businessName: true },
+        },
+      },
     })
 
     return successResponse(convertPrismaDecimals(items))
@@ -83,7 +101,7 @@ export async function POST(request: NextRequest) {
   try {
     const validation = await validateRequestBody(request, createSaleLineItemSchema)
     if ("error" in validation) return validation.error
-    const { dailyEntryId, category, customerType, paymentMethod, amount, serviceNumber, note } = validation.data
+    const { dailyEntryId, category, customerType, paymentMethod, amount, serviceNumber, note, wholesaleCustomerId, cashAmount, discountPercent } = validation.data
 
     // Verify daily entry exists and is DRAFT
     const dailyEntry = await prisma.dailyEntry.findUnique({
@@ -108,6 +126,27 @@ export async function POST(request: NextRequest) {
       return ApiErrors.badRequest("Corporate sales are only allowed for Dhiraagu Bills")
     }
 
+    // Validate wholesale customer if provided
+    if (wholesaleCustomerId) {
+      const wholesaleCustomer = await prisma.wholesaleCustomer.findUnique({
+        where: { id: wholesaleCustomerId },
+        select: { id: true, isActive: true },
+      })
+      if (!wholesaleCustomer) return ApiErrors.notFound("Wholesale customer")
+      if (!wholesaleCustomer.isActive) {
+        return ApiErrors.badRequest("Wholesale customer is deactivated")
+      }
+    }
+
+    // Check wallet balance for reload sales
+    const walletDeduction = getWalletDeduction(category, amount)
+    if (walletDeduction > 0) {
+      const walletError = await checkWalletSufficiency(category, walletDeduction)
+      if (walletError) {
+        return ApiErrors.badRequest(walletError)
+      }
+    }
+
     // Create line item
     const lineItem = await prisma.saleLineItem.create({
       data: {
@@ -118,7 +157,15 @@ export async function POST(request: NextRequest) {
         amount,
         serviceNumber: serviceNumber || null,
         note: note || null,
+        wholesaleCustomerId: wholesaleCustomerId || null,
+        cashAmount: cashAmount ?? null,
+        discountPercent: discountPercent ?? null,
         createdBy: auth.user!.id,
+      },
+      include: {
+        wholesaleCustomer: {
+          select: { id: true, name: true, phone: true, businessName: true },
+        },
       },
     })
 

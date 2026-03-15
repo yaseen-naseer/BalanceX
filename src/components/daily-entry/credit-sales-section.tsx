@@ -135,9 +135,20 @@ export function CreditSalesSection({
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-mono font-semibold text-amber-600">
-                    {Number(sale.amount).toLocaleString()} MVR
-                  </span>
+                  {sale.cashAmount != null ? (
+                    <div className="text-right">
+                      <span className="font-mono font-semibold text-amber-600">
+                        {Number(sale.cashAmount).toLocaleString()} MVR
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground">
+                        {Number(sale.amount).toLocaleString()} reload @ {Number(sale.discountPercent)}%
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="font-mono font-semibold text-amber-600">
+                      {Number(sale.amount).toLocaleString()} MVR
+                    </span>
+                  )}
                   {!isReadOnly && (
                     <Button
                       variant="ghost"

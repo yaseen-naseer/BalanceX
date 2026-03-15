@@ -8,6 +8,8 @@ import {
   validateRequestBody,
 } from "@/lib/validations"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { calculateReloadWalletCost } from "@/lib/utils/balance"
+import { getWholesaleReloadTotal } from "@/lib/utils/wholesale-reload"
 
 // GET /api/wallet - Get wallet data and top-ups
 export async function GET(request: NextRequest) {
@@ -60,20 +62,15 @@ export async function GET(request: NextRequest) {
       })
       const totalTopups = topups.reduce((sum, t) => sum + Number(t.amount), 0)
 
-      // All reload sales before the target date
+      // All reload sales before the target date (retail reload strips 8% GST for wallet cost)
       const reloadCategories = await prisma.dailyEntryCategory.findMany({
         where: {
           category: { in: ["RETAIL_RELOAD", "WHOLESALE_RELOAD"] },
           dailyEntry: { date: { lt: targetDate } },
         },
       })
-      const totalReloadSales = reloadCategories.reduce(
-        (sum, cat) =>
-          sum +
-          Number(cat.consumerCash) + Number(cat.consumerTransfer) + Number(cat.consumerCredit) +
-          Number(cat.corporateCash) + Number(cat.corporateTransfer) + Number(cat.corporateCredit),
-        0
-      )
+      const wholesaleReload = await getWholesaleReloadTotal({ beforeDate: targetDate })
+      const totalReloadSales = calculateReloadWalletCost(reloadCategories, wholesaleReload)
 
       const calculatedBalance = openingBalance + totalTopups - totalReloadSales
 
@@ -136,17 +133,8 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const totalReloadSales = reloadCategories.reduce(
-      (sum, cat) =>
-        sum +
-        Number(cat.consumerCash) +
-        Number(cat.consumerTransfer) +
-        Number(cat.consumerCredit) +
-        Number(cat.corporateCash) +
-        Number(cat.corporateTransfer) +
-        Number(cat.corporateCredit),
-      0
-    )
+    const allWholesaleReload = await getWholesaleReloadTotal()
+    const totalReloadSales = calculateReloadWalletCost(reloadCategories, allWholesaleReload)
 
     const currentBalance = openingBalance + totalTopups - totalReloadSales
 
@@ -176,17 +164,10 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const monthlyUsage = monthlyReloadCategories.reduce(
-      (sum, cat) =>
-        sum +
-        Number(cat.consumerCash) +
-        Number(cat.consumerTransfer) +
-        Number(cat.consumerCredit) +
-        Number(cat.corporateCash) +
-        Number(cat.corporateTransfer) +
-        Number(cat.corporateCredit),
-      0
-    )
+    const monthlyWholesaleReload = await getWholesaleReloadTotal({
+      dateRange: { gte: currentMonthStart, lte: currentMonthEnd },
+    })
+    const monthlyUsage = calculateReloadWalletCost(monthlyReloadCategories, monthlyWholesaleReload)
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
 
@@ -209,17 +190,12 @@ export async function GET(request: NextRequest) {
     })
 
     const todayTopupsTotal = todayTopups.reduce((sum, t) => sum + Number(t.amount), 0)
-    const todayReloadSales = todayEntry?.categories.reduce(
-      (sum, cat) =>
-        sum +
-        Number(cat.consumerCash) +
-        Number(cat.consumerTransfer) +
-        Number(cat.consumerCredit) +
-        Number(cat.corporateCash) +
-        Number(cat.corporateTransfer) +
-        Number(cat.corporateCredit),
-      0
-    ) || 0
+    const todayWholesaleReload = todayEntry
+      ? await getWholesaleReloadTotal({ dailyEntryId: todayEntry.id })
+      : 0
+    const todayReloadSales = todayEntry?.categories
+      ? calculateReloadWalletCost(todayEntry.categories, todayWholesaleReload)
+      : 0
 
     return NextResponse.json({
       success: true,

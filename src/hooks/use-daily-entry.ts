@@ -52,7 +52,7 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
   const { date, autoFetch = true } = options
   const [entry, setEntry] = useState<DailyEntryWithRelations | null>(null)
   const [calculationData, setCalculationData] = useState<CalculationData>(defaultCalculationData)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(!!date && autoFetch)
   const [error, setError] = useState<string | null>(null)
   const api = useApiClient()
 
@@ -65,8 +65,9 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
       const result = await response.json()
 
       if (result.success && result.data) {
-        setEntry(result.data)
-        setCalculationData(result.calculationData || defaultCalculationData)
+        const { calculationData: calcData, ...entryData } = result.data
+        setEntry(entryData)
+        setCalculationData(calcData || defaultCalculationData)
       } else if (response.status === 404) {
         setEntry(null)
         setCalculationData(defaultCalculationData)
@@ -173,11 +174,11 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
     }
   }, [])
 
-  // Initial data fetch - using ref to prevent double-fetch in StrictMode
-  const didFetchRef = useRef(false)
+  // Fetch on mount and when date changes - ref tracks last fetched date to prevent StrictMode double-fetch
+  const lastFetchedDateRef = useRef<string | null>(null)
   useEffect(() => {
-    if (date && autoFetch && !didFetchRef.current) {
-      didFetchRef.current = true
+    if (date && autoFetch && lastFetchedDateRef.current !== date) {
+      lastFetchedDateRef.current = date
       // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchEntry(date)
     }

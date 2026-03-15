@@ -18,6 +18,7 @@ import {
     ChevronRight,
     LogOut,
     User,
+    Store,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
@@ -29,6 +30,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/use-auth';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { WhatsNewDialog } from '@/components/dashboard/whats-new-dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -77,6 +79,11 @@ const navItems: NavItem[] = [
         title: 'Bank Ledger',
         href: '/bank',
         icon: Landmark,
+    },
+    {
+        title: 'Wholesale',
+        href: '/wholesale-customers',
+        icon: Store,
     },
     {
         title: 'Wallet',
@@ -289,6 +296,7 @@ export function Sidebar() {
                     </Button>
                 </div>
             </aside>
+            <WhatsNewDialog />
         </TooltipProvider>
     );
 }

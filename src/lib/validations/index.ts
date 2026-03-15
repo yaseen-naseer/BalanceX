@@ -49,6 +49,9 @@ export {
   updateShiftSettingsSchema,
   // Screenshot Verify Schema
   verifyScreenshotSchema,
+  // Wholesale Customer Schemas
+  createWholesaleCustomerSchema,
+  updateWholesaleCustomerSchema,
   // Import Schema
   importDataSchema,
   // Query Parameter Schemas

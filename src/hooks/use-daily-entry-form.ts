@@ -6,6 +6,7 @@ import { useWallet } from "./use-wallet"
 import { useAuth } from "./use-auth"
 import { useSaleLineItems } from "./use-sale-line-items"
 import { canEditDailyEntry } from "@/lib/permissions"
+import { stripRetailGst } from "@/lib/utils/balance"
 import type { DailyEntryWithRelations, CreateDailyEntryDto, UpdateDailyEntryDto, SaleLineItemData, CreateSaleLineItemDto } from "@/types"
 import {
   type Category,
@@ -232,20 +233,21 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     return canEditDailyEntry(user.role, entryDate, isOwnEntry)
   }, [user?.role, user?.id, date, entry])
 
-  // Update local data when entry changes
+  // Update local data when entry changes (after loading completes)
   useEffect(() => {
+    // Don't reset to zeros while still loading — entry is temporarily null
+    if (isLoading) return
     setLocalData(entryToLocalData(entry))
     setHasUserChanges(false)
     setWalletAutoLoaded(false)
     setWalletOpeningSource(entry?.wallet?.openingSource || "PREVIOUS_DAY")
     setWalletOpeningReason(null)
-  }, [entry])
+  }, [entry, isLoading])
 
-  // Fetch entry when date changes
+  // Fetch wallet when date changes (entry fetch is handled by useDailyEntry)
   useEffect(() => {
-    fetchEntry(date)
     fetchWallet()
-  }, [date, fetchEntry, fetchWallet])
+  }, [date, fetchWallet])
 
   // Auto-load wallet opening from previous day when opening is 0
   // Handles both new entries (no entry yet) and existing entries saved with opening=0
@@ -318,15 +320,16 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     }
   }, [localData])
 
-  // Calculate reload sales (for wallet) — only consumer cash + transfer (credit/corporate disabled for reload)
+  // Calculate reload wallet cost — retail strips 8% GST, wholesale uses line items' reload amount
   const reloadSalesTotal = useMemo(() => {
     const retail = localData.categories.RETAIL_RELOAD
-    const wholesale = localData.categories.WHOLESALE_RELOAD
-    return (
-      retail.consumerCash + retail.consumerTransfer +
-      wholesale.consumerCash + wholesale.consumerTransfer
-    )
-  }, [localData])
+    const retailTotal = retail.consumerCash + retail.consumerTransfer
+    // Wholesale: category grid now stores cash received, wallet cost = sum of line item amounts (reload)
+    const wholesaleWalletCost = saleLineItems
+      .filter((li) => li.category === 'WHOLESALE_RELOAD')
+      .reduce((sum, li) => sum + Number(li.amount), 0)
+    return Math.round((stripRetailGst(retailTotal) + wholesaleWalletCost) * 100) / 100
+  }, [localData, saleLineItems])
 
   // Calculate variance data
   const variance = useMemo<VarianceData>(() => {

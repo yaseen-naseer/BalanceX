@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { Plus } from "lucide-react"
+import { Plus, Search, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import {
   type Category,
@@ -22,7 +22,7 @@ import {
   CUSTOMER_TYPES,
   PAYMENT_METHODS,
 } from "./types"
-import type { SaleLineItemData, CreateSaleLineItemDto } from "@/types"
+import type { SaleLineItemData, CreateSaleLineItemDto, WholesaleCustomerData, WholesaleDiscountTierData } from "@/types"
 
 // ─── CurrencyInput (unchanged) ────────────────────────────────────────
 
@@ -81,53 +81,165 @@ function CurrencyInput({ value, onChange, className, disabled }: CurrencyInputPr
 
 interface AddLineItemPopoverProps {
   categoryLabel: string
+  categoryKey: string
   customerTypeLabel: string
   paymentMethodLabel: string
-  onAdd: (amount: number, serviceNumber?: string, note?: string) => Promise<boolean>
+  onAdd: (amount: number, serviceNumber?: string, note?: string, wholesaleCustomerId?: string, cashAmount?: number, discountPercent?: number) => Promise<boolean>
   disabled?: boolean
+  // Wholesale customer props
+  wholesaleCustomers?: WholesaleCustomerData[]
+  wholesaleSearch?: string
+  onWholesaleSearchChange?: (value: string) => void
+  onCreateWholesaleCustomer?: (data: { name: string; phone: string }) => Promise<WholesaleCustomerData | null>
+  // Wholesale calculator props
+  getDiscount?: (cashAmount: number, customer: WholesaleCustomerData | null) => number | null
+  calculateReload?: (cashAmount: number, discountPercent: number) => number
+  minCashAmount?: number
 }
 
 function AddLineItemPopover({
   categoryLabel,
+  categoryKey,
   customerTypeLabel,
   paymentMethodLabel,
   onAdd,
   disabled,
+  wholesaleCustomers,
+  wholesaleSearch,
+  onWholesaleSearchChange,
+  onCreateWholesaleCustomer,
+  getDiscount,
+  calculateReload,
+  minCashAmount,
 }: AddLineItemPopoverProps) {
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState("")
+  const [cashAmount, setCashAmount] = useState("")
   const [serviceNumber, setServiceNumber] = useState("")
   const [note, setNote] = useState("")
   const [isAdding, setIsAdding] = useState(false)
+  // Wholesale customer selection
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
+  const [showNewCustomerForm, setShowNewCustomerForm] = useState(false)
+  const [newCustomerName, setNewCustomerName] = useState("")
+  const [newCustomerPhone, setNewCustomerPhone] = useState("")
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false)
+
+  const isWholesaleReload = categoryKey === "WHOLESALE_RELOAD"
+  const selectedCustomer = wholesaleCustomers?.find((c) => c.id === selectedCustomerId)
+
+  // Wholesale calculator: derive discount and reload from cash amount
+  const numCashAmount = parseFloat(cashAmount) || 0
+  const wholesaleDiscount = isWholesaleReload && getDiscount && selectedCustomer
+    ? getDiscount(numCashAmount, selectedCustomer)
+    : null
+  const wholesaleReloadAmount = isWholesaleReload && wholesaleDiscount != null && calculateReload && numCashAmount > 0
+    ? calculateReload(numCashAmount, wholesaleDiscount)
+    : null
 
   const reset = () => {
     setAmount("")
+    setCashAmount("")
     setServiceNumber("")
     setNote("")
+    setSelectedCustomerId(null)
+    setShowNewCustomerForm(false)
+    setNewCustomerName("")
+    setNewCustomerPhone("")
+    onWholesaleSearchChange?.("")
+  }
+
+  const handleCreateCustomer = async () => {
+    if (!newCustomerName.trim() || !newCustomerPhone.trim()) {
+      toast.error("Name and phone are required")
+      return
+    }
+    if (!onCreateWholesaleCustomer) return
+    setIsCreatingCustomer(true)
+    try {
+      const customer = await onCreateWholesaleCustomer({
+        name: newCustomerName.trim(),
+        phone: newCustomerPhone.trim(),
+      })
+      if (customer) {
+        setSelectedCustomerId(customer.id)
+        setShowNewCustomerForm(false)
+        setNewCustomerName("")
+        setNewCustomerPhone("")
+        toast.success("Customer created")
+      } else {
+        toast.error("Failed to create customer")
+      }
+    } finally {
+      setIsCreatingCustomer(false)
+    }
   }
 
   const handleAdd = async () => {
-    const numAmount = parseFloat(amount)
-    if (!numAmount || numAmount <= 0) {
-      toast.error("Enter a valid amount")
-      return
-    }
-    setIsAdding(true)
-    try {
-      const success = await onAdd(
-        Math.round(numAmount * 100) / 100,
-        serviceNumber || undefined,
-        note || undefined
-      )
-      if (success) {
-        reset()
-        setOpen(false)
-        toast.success("Sale added")
-      } else {
-        toast.error("Failed to add sale")
+    if (isWholesaleReload) {
+      // Wholesale: validate cash amount and computed reload
+      if (!selectedCustomerId) {
+        toast.error("Select a customer for wholesale reload")
+        return
       }
-    } finally {
-      setIsAdding(false)
+      if (!numCashAmount || numCashAmount <= 0) {
+        toast.error("Enter a valid cash amount")
+        return
+      }
+      if (minCashAmount && numCashAmount < minCashAmount) {
+        toast.error(`Minimum cash amount is ${minCashAmount.toLocaleString()} MVR`)
+        return
+      }
+      if (wholesaleDiscount == null) {
+        toast.error("Cash amount does not qualify for any discount tier")
+        return
+      }
+      if (!wholesaleReloadAmount) {
+        toast.error("Cannot calculate reload amount")
+        return
+      }
+      setIsAdding(true)
+      try {
+        const success = await onAdd(
+          wholesaleReloadAmount,
+          serviceNumber || undefined,
+          note || undefined,
+          selectedCustomerId,
+          numCashAmount,
+          wholesaleDiscount
+        )
+        if (success) {
+          reset()
+          setOpen(false)
+          toast.success("Wholesale sale added")
+        }
+        // Error is already toasted by the caller
+      } finally {
+        setIsAdding(false)
+      }
+    } else {
+      // Non-wholesale: use plain amount
+      const numAmount = parseFloat(amount)
+      if (!numAmount || numAmount <= 0) {
+        toast.error("Enter a valid amount")
+        return
+      }
+      setIsAdding(true)
+      try {
+        const success = await onAdd(
+          Math.round(numAmount * 100) / 100,
+          serviceNumber || undefined,
+          note || undefined
+        )
+        if (success) {
+          reset()
+          setOpen(false)
+          toast.success("Sale added")
+        }
+        // Error is already toasted by the caller
+      } finally {
+        setIsAdding(false)
+      }
     }
   }
 
@@ -147,30 +259,169 @@ function AddLineItemPopover({
           <Plus className="h-3.5 w-3.5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-3" align="start" side="bottom">
+      <PopoverContent className={cn("p-3", isWholesaleReload ? "w-80" : "w-72")} align="start" side="bottom">
         <div className="space-y-3">
           <div>
             <p className="text-sm font-medium">{categoryLabel}</p>
             <p className="text-xs text-muted-foreground">{customerTypeLabel} &middot; {paymentMethodLabel}</p>
           </div>
-          <div className="space-y-2">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Amount *</label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => {
-                  if (e.target.value === "" || /^\d*\.?\d*$/.test(e.target.value)) {
-                    setAmount(e.target.value)
-                  }
-                }}
-                placeholder="0.00"
-                className="h-8 text-sm font-mono"
-                autoFocus
-                onKeyDown={(e) => { if (e.key === "Enter") handleAdd() }}
-              />
+
+          {/* Wholesale Customer selector */}
+          {isWholesaleReload && wholesaleCustomers && (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Customer</label>
+              {selectedCustomer ? (
+                <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/20">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{selectedCustomer.name}</p>
+                    <p className="text-xs text-muted-foreground">{selectedCustomer.phone}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs shrink-0"
+                    onClick={() => setSelectedCustomerId(null)}
+                  >
+                    Change
+                  </Button>
+                </div>
+              ) : showNewCustomerForm ? (
+                <div className="space-y-2 p-2 rounded-md border bg-muted/30">
+                  <Input
+                    value={newCustomerName}
+                    onChange={(e) => setNewCustomerName(e.target.value)}
+                    placeholder="Customer name"
+                    className="h-7 text-sm"
+                    autoFocus
+                  />
+                  <Input
+                    value={newCustomerPhone}
+                    onChange={(e) => setNewCustomerPhone(e.target.value)}
+                    placeholder="Phone number"
+                    className="h-7 text-sm"
+                  />
+                  <div className="flex gap-1 justify-end">
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowNewCustomerForm(false)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={handleCreateCustomer}
+                      disabled={isCreatingCustomer || !newCustomerName.trim() || !newCustomerPhone.trim()}
+                    >
+                      {isCreatingCustomer ? "..." : "Create"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      value={wholesaleSearch || ""}
+                      onChange={(e) => onWholesaleSearchChange?.(e.target.value)}
+                      placeholder="Search customers..."
+                      className="h-8 text-sm pl-7"
+                    />
+                  </div>
+                  <div className="max-h-32 overflow-y-auto rounded-md border">
+                    {wholesaleCustomers.length === 0 ? (
+                      <p className="text-xs text-muted-foreground p-2 text-center">No customers found</p>
+                    ) : (
+                      wholesaleCustomers.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="w-full text-left px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors flex items-center gap-2"
+                          onClick={() => setSelectedCustomerId(c.id)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium truncate block">{c.name}</span>
+                            <span className="text-xs text-muted-foreground">{c.phone}</span>
+                          </div>
+                          {c.purchaseCount > 0 && (
+                            <span className="text-[10px] text-muted-foreground shrink-0">
+                              {c.purchaseCount} sales
+                            </span>
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-7 text-xs"
+                    onClick={() => setShowNewCustomerForm(true)}
+                  >
+                    <UserPlus className="h-3 w-3 mr-1" />
+                    New Customer
+                  </Button>
+                </div>
+              )}
             </div>
+          )}
+
+          <div className="space-y-2">
+            {isWholesaleReload ? (
+              <>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Cash Amount *</label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    value={cashAmount}
+                    onChange={(e) => {
+                      if (e.target.value === "" || /^\d*\.?\d*$/.test(e.target.value)) {
+                        setCashAmount(e.target.value)
+                      }
+                    }}
+                    placeholder={minCashAmount ? `Min ${minCashAmount}` : "0.00"}
+                    className="h-8 text-sm font-mono"
+                    onKeyDown={(e) => { if (e.key === "Enter") handleAdd() }}
+                  />
+                </div>
+                {selectedCustomer && numCashAmount > 0 && (
+                  <div className="rounded-md bg-muted/50 p-2 space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Discount</span>
+                      <span className="font-medium">
+                        {wholesaleDiscount != null
+                          ? `${wholesaleDiscount}%${selectedCustomer.discountOverride != null ? " (fixed)" : ""}`
+                          : "Below min threshold"}
+                      </span>
+                    </div>
+                    {wholesaleReloadAmount != null && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Reload Amount</span>
+                        <span className="font-mono font-semibold text-primary">
+                          {wholesaleReloadAmount.toLocaleString()} MVR
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Amount *</label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => {
+                    if (e.target.value === "" || /^\d*\.?\d*$/.test(e.target.value)) {
+                      setAmount(e.target.value)
+                    }
+                  }}
+                  placeholder="0.00"
+                  className="h-8 text-sm font-mono"
+                  autoFocus={!isWholesaleReload}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAdd() }}
+                />
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium text-muted-foreground">Service #</label>
               <Input
@@ -206,7 +457,7 @@ function AddLineItemPopover({
             <Button
               size="sm"
               onClick={handleAdd}
-              disabled={isAdding || !amount}
+              disabled={isAdding || (isWholesaleReload ? (!selectedCustomerId || !wholesaleReloadAmount) : !amount)}
               className="h-7 text-xs"
             >
               {isAdding ? "Adding..." : "Add Sale"}
@@ -232,10 +483,19 @@ export interface CategoryTableProps {
   hasLineItems?: (category: string, customerType: string, paymentMethod: string) => boolean
   getLineItemsForCell?: (category: string, customerType: string, paymentMethod: string) => SaleLineItemData[]
   getLineItemCount?: (category: string, customerType: string, paymentMethod: string) => number
-  onAddLineItem?: (data: CreateSaleLineItemDto) => Promise<{ success: boolean; cellTotal?: number; cellCount?: number }>
+  onAddLineItem?: (data: CreateSaleLineItemDto) => Promise<{ success: boolean; cellTotal?: number; cellCount?: number; error?: string }>
   onDeleteLineItem?: (id: string) => Promise<{ success: boolean; cellTotal?: number; cellCount?: number }>
   /** Called to ensure a draft entry exists before adding line items. Returns the entry ID or false. */
   onEnsureDraft?: () => Promise<string | false>
+  // Wholesale customer props
+  wholesaleCustomers?: WholesaleCustomerData[]
+  wholesaleSearch?: string
+  onWholesaleSearchChange?: (value: string) => void
+  onCreateWholesaleCustomer?: (data: { name: string; phone: string }) => Promise<WholesaleCustomerData | null>
+  // Wholesale calculator props
+  getDiscount?: (cashAmount: number, customer: WholesaleCustomerData | null) => number | null
+  calculateReload?: (cashAmount: number, discountPercent: number) => number
+  minCashAmount?: number
 }
 
 export function CategoryTable({
@@ -252,6 +512,13 @@ export function CategoryTable({
   onAddLineItem,
   onDeleteLineItem,
   onEnsureDraft,
+  wholesaleCustomers,
+  wholesaleSearch,
+  onWholesaleSearchChange,
+  onCreateWholesaleCustomer,
+  getDiscount,
+  calculateReload,
+  minCashAmount,
 }: CategoryTableProps) {
   // Line item functions are available (props were passed)
   const lineItemFunctionsAvailable = !!(hasLineItems && getLineItemsForCell && getLineItemCount && onAddLineItem && onDeleteLineItem)
@@ -337,7 +604,7 @@ export function CategoryTable({
                         const showAddButton = lineItemFunctionsAvailable && !isReadOnly && isNonCreditEditableCell
 
                         // Handler that auto-saves draft if needed, then adds the line item
-                        const handleAddLineItem = async (amount: number, serviceNumber?: string, note?: string) => {
+                        const handleAddLineItem = async (amount: number, serviceNumber?: string, note?: string, wholesaleCustomerId?: string, itemCashAmount?: number, itemDiscountPercent?: number) => {
                           let entryId = dailyEntryId
                           // Auto-save draft if entry doesn't exist yet
                           if (!entryId && onEnsureDraft) {
@@ -360,7 +627,13 @@ export function CategoryTable({
                             amount,
                             serviceNumber,
                             note,
+                            wholesaleCustomerId,
+                            cashAmount: itemCashAmount,
+                            discountPercent: itemDiscountPercent,
                           })
+                          if (!addResult.success && addResult.error) {
+                            toast.error(addResult.error)
+                          }
                           return addResult.success
                         }
 
@@ -399,10 +672,18 @@ export function CategoryTable({
                                 {showAddButton && (
                                   <AddLineItemPopover
                                     categoryLabel={category.label}
+                                    categoryKey={category.key}
                                     customerTypeLabel={ct.label}
                                     paymentMethodLabel={pm.label}
                                     onAdd={handleAddLineItem}
                                     disabled={isReadOnly}
+                                    wholesaleCustomers={category.key === "WHOLESALE_RELOAD" ? wholesaleCustomers : undefined}
+                                    wholesaleSearch={category.key === "WHOLESALE_RELOAD" ? wholesaleSearch : undefined}
+                                    onWholesaleSearchChange={category.key === "WHOLESALE_RELOAD" ? onWholesaleSearchChange : undefined}
+                                    onCreateWholesaleCustomer={category.key === "WHOLESALE_RELOAD" ? onCreateWholesaleCustomer : undefined}
+                                    getDiscount={category.key === "WHOLESALE_RELOAD" ? getDiscount : undefined}
+                                    calculateReload={category.key === "WHOLESALE_RELOAD" ? calculateReload : undefined}
+                                    minCashAmount={category.key === "WHOLESALE_RELOAD" ? minCashAmount : undefined}
                                   />
                                 )}
                               </div>

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { AlertCircle, Eye, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Wallet } from 'lucide-react'
+import { stripRetailGst } from '@/lib/utils/balance'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth } from 'date-fns'
 import { useWallet } from '@/hooks/use-wallet'
 import { useAuth } from '@/hooks/use-auth'
@@ -30,6 +31,8 @@ export default function WalletPage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [monthEntries, setMonthEntries] = useState<DailyEntryWithRelations[]>([])
   const [loadingEntries, setLoadingEntries] = useState(false)
+  // Wholesale reload totals per entry (wallet cost = line item amount, not category grid cash)
+  const [wholesaleReloadByEntry, setWholesaleReloadByEntry] = useState<Record<string, number>>({})
 
   const {
     topups,
@@ -53,6 +56,31 @@ export default function WalletPage() {
       const data = await res.json()
       if (data.success) {
         setMonthEntries(data.data)
+
+        // Fetch wholesale reload totals (wallet cost) per entry from line items
+        // Category grid now stores cash received, but wallet needs reload amounts
+        const entryIds = (data.data as DailyEntryWithRelations[]).map((e) => e.id)
+        if (entryIds.length > 0) {
+          const reloadMap: Record<string, number> = {}
+          // Fetch line items for all entries in batch via individual entry queries
+          await Promise.all(
+            entryIds.map(async (eid) => {
+              const liRes = await fetch(`/api/sale-line-items?dailyEntryId=${eid}`)
+              const liData = await liRes.json()
+              if (liData.success && liData.data) {
+                const wholesaleTotal = (liData.data as Array<{ category: string; amount: number; cashAmount: number | null }>)
+                  .filter((li) => li.category === 'WHOLESALE_RELOAD')
+                  .reduce((sum, li) => sum + Number(li.amount), 0)
+                if (wholesaleTotal > 0) {
+                  reloadMap[eid] = wholesaleTotal
+                }
+              }
+            })
+          )
+          setWholesaleReloadByEntry(reloadMap)
+        } else {
+          setWholesaleReloadByEntry({})
+        }
       }
     } catch {
       // silently fail — reload sales just won't show
@@ -80,15 +108,18 @@ export default function WalletPage() {
   // Calculate total reload sales for selected month from daily entries
   const totalReloadSalesThisMonth = useMemo(() => {
     return monthEntries.reduce((sum, entry) => {
-      const reloadTotal = entry.categories?.reduce((s, cat) => {
-        if (cat.category === 'RETAIL_RELOAD' || cat.category === 'WHOLESALE_RELOAD') {
-          return s + Number(cat.consumerCash) + Number(cat.consumerTransfer)
+      let reloadTotal = 0
+      for (const cat of (entry.categories ?? [])) {
+        if (cat.category === 'RETAIL_RELOAD') {
+          reloadTotal += stripRetailGst(Number(cat.consumerCash) + Number(cat.consumerTransfer))
         }
-        return s
-      }, 0) ?? 0
+        // Wholesale: category grid has cash received, skip it here
+      }
+      // Wholesale wallet cost from line items
+      reloadTotal += wholesaleReloadByEntry[entry.id] ?? 0
       return sum + reloadTotal
     }, 0)
-  }, [monthEntries])
+  }, [monthEntries, wholesaleReloadByEntry])
 
   // Build unified activity list: topups + reload sales per day, sorted by date desc
   const activityRows = useMemo((): ActivityRow[] => {
@@ -108,12 +139,14 @@ export default function WalletPage() {
 
     // Add reload sales per day from daily entries
     monthEntries.forEach((entry) => {
-      const reloadTotal = entry.categories?.reduce((s, cat) => {
-        if (cat.category === 'RETAIL_RELOAD' || cat.category === 'WHOLESALE_RELOAD') {
-          return s + Number(cat.consumerCash) + Number(cat.consumerTransfer)
+      let reloadTotal = 0
+      for (const cat of (entry.categories ?? [])) {
+        if (cat.category === 'RETAIL_RELOAD') {
+          reloadTotal += stripRetailGst(Number(cat.consumerCash) + Number(cat.consumerTransfer))
         }
-        return s
-      }, 0) ?? 0
+        // Wholesale: category grid has cash received, use line item data instead
+      }
+      reloadTotal += wholesaleReloadByEntry[entry.id] ?? 0
 
       if (reloadTotal > 0) {
         const dateStr = format(new Date(entry.date), 'yyyy-MM-dd')
@@ -127,7 +160,7 @@ export default function WalletPage() {
     })
 
     return rows.sort((a, b) => b.date.localeCompare(a.date))
-  }, [monthTopups, monthEntries])
+  }, [monthTopups, monthEntries, wholesaleReloadByEntry])
 
   const handleDelete = async (id: string) => {
     const result = await deleteTopup(id)

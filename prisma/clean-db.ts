@@ -40,59 +40,34 @@ async function main() {
   console.log(`Found ${userCount} users (will be preserved)\n`)
 
   // Delete all data except users
-  // Order matters due to foreign key constraints
-  
-  console.log("1. Deleting Telco Screenshots...")
-  const screenshots = await prisma.telcoScreenshot.deleteMany()
-  console.log(`   ✓ Deleted ${screenshots.count} screenshots`)
+  // Order matters due to foreign key constraints (children first)
 
-  console.log("2. Deleting Wallet Topups...")
-  const topups = await prisma.walletTopup.deleteMany()
-  console.log(`   ✓ Deleted ${topups.count} top-ups`)
+  let step = 0
+  const del = async (label: string, fn: () => Promise<{ count: number }>) => {
+    step++
+    console.log(`${step}. Deleting ${label}...`)
+    const result = await fn()
+    console.log(`   ✓ Deleted ${result.count} ${label.toLowerCase()}`)
+  }
 
-  console.log("3. Deleting Wallet Settings...")
-  const walletSettings = await prisma.walletSettings.deleteMany()
-  console.log(`   ✓ Deleted ${walletSettings.count} wallet settings`)
-
-  console.log("4. Deleting Bank Transactions...")
-  const bankTransactions = await prisma.bankTransaction.deleteMany()
-  console.log(`   ✓ Deleted ${bankTransactions.count} bank transactions`)
-
-  console.log("5. Deleting Bank Settings...")
-  const bankSettings = await prisma.bankSettings.deleteMany()
-  console.log(`   ✓ Deleted ${bankSettings.count} bank settings`)
-
-  console.log("6. Deleting Credit Transactions...")
-  const creditTransactions = await prisma.creditTransaction.deleteMany()
-  console.log(`   ✓ Deleted ${creditTransactions.count} credit transactions`)
-
-  console.log("7. Deleting Credit Sales...")
-  const creditSales = await prisma.creditSale.deleteMany()
-  console.log(`   ✓ Deleted ${creditSales.count} credit sales`)
-
-  console.log("8. Deleting Credit Customers...")
-  const creditCustomers = await prisma.creditCustomer.deleteMany()
-  console.log(`   ✓ Deleted ${creditCustomers.count} credit customers`)
-
-  console.log("9. Deleting Daily Entry Notes...")
-  const notes = await prisma.dailyEntryNotes.deleteMany()
-  console.log(`   ✓ Deleted ${notes.count} notes`)
-
-  console.log("10. Deleting Daily Entry Categories...")
-  const categories = await prisma.dailyEntryCategory.deleteMany()
-  console.log(`   ✓ Deleted ${categories.count} categories`)
-
-  console.log("11. Deleting Daily Entry Wallets...")
-  const wallets = await prisma.dailyEntryWallet.deleteMany()
-  console.log(`   ✓ Deleted ${wallets.count} wallet records`)
-
-  console.log("12. Deleting Daily Entry Cash Drawers...")
-  const cashDrawers = await prisma.dailyEntryCashDrawer.deleteMany()
-  console.log(`   ✓ Deleted ${cashDrawers.count} cash drawer records`)
-
-  console.log("13. Deleting Daily Entries...")
-  const dailyEntries = await prisma.dailyEntry.deleteMany()
-  console.log(`   ✓ Deleted ${dailyEntries.count} daily entries`)
+  await del("Audit Logs", () => prisma.auditLog.deleteMany())
+  await del("Telco Screenshots", () => prisma.telcoScreenshot.deleteMany())
+  await del("Daily Entry Amendments", () => prisma.dailyEntryAmendment.deleteMany())
+  await del("Sale Line Items", () => prisma.saleLineItem.deleteMany())
+  await del("Credit Sales", () => prisma.creditSale.deleteMany())
+  await del("Credit Transactions", () => prisma.creditTransaction.deleteMany())
+  await del("Credit Customers", () => prisma.creditCustomer.deleteMany())
+  await del("Wholesale Customers", () => prisma.wholesaleCustomer.deleteMany())
+  await del("Wholesale Discount Tiers", () => prisma.wholesaleDiscountTier.deleteMany())
+  await del("Wallet Topups", () => prisma.walletTopup.deleteMany())
+  await del("Wallet Settings", () => prisma.walletSettings.deleteMany())
+  await del("Bank Transactions", () => prisma.bankTransaction.deleteMany())
+  await del("Bank Settings", () => prisma.bankSettings.deleteMany())
+  await del("Daily Entry Notes", () => prisma.dailyEntryNotes.deleteMany())
+  await del("Daily Entry Categories", () => prisma.dailyEntryCategory.deleteMany())
+  await del("Daily Entry Wallets", () => prisma.dailyEntryWallet.deleteMany())
+  await del("Daily Entry Cash Drawers", () => prisma.dailyEntryCashDrawer.deleteMany())
+  await del("Daily Entries", () => prisma.dailyEntry.deleteMany())
 
   // Verify users are still there
   const remainingUsers = await prisma.user.count()

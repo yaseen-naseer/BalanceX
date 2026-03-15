@@ -75,6 +75,8 @@ export interface DailyEntryWithRelations {
     customerId: string
     category: "DHIRAAGU_BILLS" | "RETAIL_RELOAD" | "WHOLESALE_RELOAD" | "SIM" | "USIM"
     amount: number
+    cashAmount: number | null
+    discountPercent: number | null
     reference: string | null
     customer: {
       id: string
@@ -209,6 +211,10 @@ export interface SaleLineItemData {
   amount: number
   serviceNumber: string | null
   note: string | null
+  wholesaleCustomerId: string | null
+  wholesaleCustomer: { id: string; name: string; phone: string; businessName: string | null } | null
+  cashAmount: number | null
+  discountPercent: number | null
   timestamp: string
   createdBy: string
   createdAt: string
@@ -222,6 +228,42 @@ export interface CreateSaleLineItemDto {
   amount: number
   serviceNumber?: string | null
   note?: string | null
+  wholesaleCustomerId?: string | null
+  cashAmount?: number | null
+  discountPercent?: number | null
+}
+
+// Wholesale Customer types
+export interface WholesaleCustomerData {
+  id: string
+  name: string
+  phone: string
+  businessName: string | null
+  notes: string | null
+  discountOverride: number | null
+  isActive: boolean
+  totalPurchases: number
+  totalCashAmount: number
+  purchaseCount: number
+  lastPurchaseDate: string | null
+  createdAt: string
+}
+
+export interface CreateWholesaleCustomerDto {
+  name: string
+  phone: string
+  businessName?: string | null
+  notes?: string | null
+  discountOverride?: number | null
+}
+
+// Wholesale Discount Tier types
+export interface WholesaleDiscountTierData {
+  id: string
+  discountPercent: number
+  minCashAmount: number
+  isActive: boolean
+  sortOrder: number
 }
 
 // Dashboard types

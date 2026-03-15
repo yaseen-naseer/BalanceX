@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { createCreditSaleSchema, validateRequestBody } from "@/lib/validations"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { checkWalletSufficiency } from "@/lib/utils/wallet-check"
 
 // POST /api/credit-sales - Create a new credit sale
 export async function POST(request: NextRequest) {
@@ -30,7 +31,51 @@ export async function POST(request: NextRequest) {
     // Validate request body
     const validation = await validateRequestBody(request, createCreditSaleSchema)
     if ("error" in validation) return validation.error
-    const { dailyEntryId, customerId, amount, reference, category, overrideLimit } = validation.data
+    const { dailyEntryId, customerId: directCustomerId, wholesaleCustomerId, amount, cashAmount, discountPercent, reference, category, overrideLimit } = validation.data
+
+    // Resolve the credit customer
+    let customerId: string
+    let wholesaleCustomer: { id: string; name: string; phone: string; discountOverride: unknown } | null = null
+
+    if (wholesaleCustomerId) {
+      // Wholesale flow: look up wholesale customer, then find/create credit customer
+      wholesaleCustomer = await prisma.wholesaleCustomer.findUnique({
+        where: { id: wholesaleCustomerId },
+        select: { id: true, name: true, phone: true, businessName: true, discountOverride: true, isActive: true },
+      })
+
+      if (!wholesaleCustomer) {
+        return NextResponse.json(
+          { success: false, error: "Wholesale customer not found" },
+          { status: 404 }
+        )
+      }
+
+      // Find or create a matching CreditCustomer by phone
+      let creditCustomer = await prisma.creditCustomer.findFirst({
+        where: { phone: wholesaleCustomer.phone },
+      })
+
+      if (!creditCustomer) {
+        creditCustomer = await prisma.creditCustomer.create({
+          data: {
+            name: wholesaleCustomer.name,
+            type: "CONSUMER",
+            phone: wholesaleCustomer.phone,
+            creditLimit: null,
+          },
+        })
+      }
+
+      customerId = creditCustomer.id
+    } else if (directCustomerId) {
+      customerId = directCustomerId
+    } else {
+      return NextResponse.json(
+        { success: false, error: "Customer ID or wholesale customer ID is required" },
+        { status: 400 }
+      )
+    }
 
     // Get customer details for credit limit check
     const customer = await prisma.creditCustomer.findUnique({
@@ -64,8 +109,12 @@ export async function POST(request: NextRequest) {
       }
     }, 0)
 
+    // For wholesale credit, the credit balance tracks cashAmount (what customer owes)
+    // For regular credit, it tracks amount
+    const creditBalanceAmount = cashAmount ?? amount
+
     // Check credit limit
-    const newBalance = outstandingBalance + amount
+    const newBalance = outstandingBalance + creditBalanceAmount
     let limitExceeded = false
     let limitAmount = 0
 
@@ -84,7 +133,7 @@ export async function POST(request: NextRequest) {
           requiresOwnerApproval: true,
           limitDetails: {
             currentBalance: outstandingBalance,
-            saleAmount: amount,
+            saleAmount: creditBalanceAmount,
             newBalance,
             creditLimit: limitAmount,
             exceededBy: newBalance - limitAmount,
@@ -114,13 +163,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check wallet balance for wholesale credit sales
+    if (category === "WHOLESALE_RELOAD") {
+      const walletError = await checkWalletSufficiency("WHOLESALE_RELOAD", amount)
+      if (walletError) {
+        return NextResponse.json(
+          { success: false, error: walletError },
+          { status: 400 }
+        )
+      }
+    }
+
     // Create the credit sale
     const creditSale = await prisma.creditSale.create({
       data: {
         dailyEntryId,
         customerId,
+        wholesaleCustomerId: wholesaleCustomerId ?? null,
         category: category || "DHIRAAGU_BILLS",
-        amount,
+        amount, // reload amount for wholesale, regular amount otherwise
+        cashAmount: cashAmount ?? null,
+        discountPercent: discountPercent ?? null,
         reference: reference || null,
       },
       include: {
@@ -138,7 +201,7 @@ export async function POST(request: NextRequest) {
       data: {
         customerId,
         type: "CREDIT_SALE",
-        amount,
+        amount: creditBalanceAmount, // cashAmount for wholesale (what they owe), amount for regular
         date: dailyEntry.date,
         balanceAfter: newBalance,
         reference: reference || null,
@@ -146,6 +209,37 @@ export async function POST(request: NextRequest) {
         createdBy: auth.user!.id,
       },
     })
+
+    // For wholesale credit sales: create a SaleLineItem so wallet calculations include the reload
+    if (category === "WHOLESALE_RELOAD" && wholesaleCustomerId) {
+      await prisma.saleLineItem.create({
+        data: {
+          dailyEntryId,
+          category: "WHOLESALE_RELOAD",
+          customerType: customer.type,
+          paymentMethod: "CREDIT",
+          amount, // reload amount (wallet deduction)
+          cashAmount: cashAmount ?? null,
+          discountPercent: discountPercent ?? null,
+          wholesaleCustomerId,
+          note: `Credit sale #${creditSale.id}`,
+          createdBy: auth.user!.id,
+        },
+      })
+
+      // Sync the category cell total (grid shows cash received)
+      const fieldName = customer.type === "CONSUMER" ? "consumerCredit" : "corporateCredit"
+      const items = await prisma.saleLineItem.findMany({
+        where: { dailyEntryId, category: "WHOLESALE_RELOAD", customerType: customer.type, paymentMethod: "CREDIT" },
+        select: { cashAmount: true, amount: true },
+      })
+      const cellTotal = items.reduce((sum, item) => sum + Number(item.cashAmount ?? item.amount), 0)
+      await prisma.dailyEntryCategory.upsert({
+        where: { dailyEntryId_category: { dailyEntryId, category: "WHOLESALE_RELOAD" } },
+        update: { [fieldName]: cellTotal },
+        create: { dailyEntryId, category: "WHOLESALE_RELOAD", [fieldName]: cellTotal },
+      })
+    }
 
     // Log credit sale
     await createAuditLog({
@@ -242,8 +336,8 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Delete the credit sale and corresponding credit transaction atomically
-    await prisma.$transaction([
+    // Delete the credit sale, credit transaction, and any linked sale line item atomically
+    const transactionOps = [
       // Delete the corresponding credit transaction to avoid orphaned records
       prisma.creditTransaction.deleteMany({
         where: {
@@ -259,11 +353,43 @@ export async function DELETE(request: NextRequest) {
           ],
         },
       }),
+      // Delete linked wholesale sale line item (note contains credit sale ID)
+      prisma.saleLineItem.deleteMany({
+        where: {
+          dailyEntryId: creditSale.dailyEntryId,
+          category: "WHOLESALE_RELOAD",
+          paymentMethod: "CREDIT",
+          note: `Credit sale #${id}`,
+        },
+      }),
       // Delete the credit sale
       prisma.creditSale.delete({
         where: { id },
       }),
-    ])
+    ]
+
+    await prisma.$transaction(transactionOps)
+
+    // If it was a wholesale credit sale, sync the cell total
+    if (creditSale.category === "WHOLESALE_RELOAD" && creditSale.wholesaleCustomerId) {
+      const customerType = creditSale.customer.type
+      const fieldName = customerType === "CONSUMER" ? "consumerCredit" : "corporateCredit"
+      const items = await prisma.saleLineItem.findMany({
+        where: {
+          dailyEntryId: creditSale.dailyEntryId,
+          category: "WHOLESALE_RELOAD",
+          customerType,
+          paymentMethod: "CREDIT",
+        },
+        select: { cashAmount: true, amount: true },
+      })
+      const cellTotal = items.reduce((sum, item) => sum + Number(item.cashAmount ?? item.amount), 0)
+      await prisma.dailyEntryCategory.upsert({
+        where: { dailyEntryId_category: { dailyEntryId: creditSale.dailyEntryId, category: "WHOLESALE_RELOAD" } },
+        update: { [fieldName]: cellTotal },
+        create: { dailyEntryId: creditSale.dailyEntryId, category: "WHOLESALE_RELOAD", [fieldName]: cellTotal },
+      })
+    }
 
     await createAuditLog({
       action: "CREDIT_SALE_DELETED",

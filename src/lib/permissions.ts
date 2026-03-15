@@ -134,6 +134,7 @@ export const NAV_PERMISSIONS: NavItemPermission[] = [
   { href: "/import", allowedRoles: ["OWNER", "ACCOUNTANT"] },
   { href: "/credit", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },
   { href: "/bank", allowedRoles: ["OWNER", "ACCOUNTANT"] },
+  { href: "/wholesale-customers", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },
   { href: "/wallet", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },
   { href: "/reports", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },
   { href: "/settings", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },

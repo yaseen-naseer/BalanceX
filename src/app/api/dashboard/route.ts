@@ -93,7 +93,7 @@ export async function GET(_request: NextRequest) {
     )
 
     const bankBalance = calculateBankBalance(bankSettings, bankTransactions)
-    const walletBalance = calculateWalletBalance(walletSettings, walletTopups, reloadCategories)
+    const walletBalance = await calculateWalletBalance(walletSettings, walletTopups, reloadCategories)
 
     // Generate alerts and activity
     const [alerts, recentActivity] = await Promise.all([

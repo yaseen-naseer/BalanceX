@@ -23,11 +23,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useAuth } from '@/hooks/use-auth'
-import type { CreditCustomerWithBalance, CreateCreditCustomerDto } from '@/types'
+import { useWholesaleCustomers } from '@/hooks/use-wholesale-customers'
+import type { CreditCustomerWithBalance, CreateCreditCustomerDto, WholesaleCustomerData } from '@/types'
 import { CustomerSelector } from './customer-selector'
 import { CustomerInfoCard } from './customer-info-card'
 import { LimitWarningDialog, type LimitWarningData } from './limit-warning-dialog'
 import { CustomerFormDialog } from './customer-form-dialog'
+import { WholesaleCustomerSelector } from './wholesale-customer-selector'
 
 const CREDIT_CATEGORIES = [
   { value: 'DHIRAAGU_BILLS', label: 'Dhiraagu Bills' },
@@ -43,6 +45,7 @@ interface CreditSaleDialogProps {
 
 export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disabled }: CreditSaleDialogProps) {
   const { isOwner } = useAuth()
+  const wholesale = useWholesaleCustomers()
   const [open, setOpen] = useState(false)
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false)
   const [showLimitWarning, setShowLimitWarning] = useState(false)
@@ -50,13 +53,25 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
   const [customers, setCustomers] = useState<CreditCustomerWithBalance[]>([])
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<CreditCustomerWithBalance | null>(null)
+  const [selectedWholesaleCustomer, setSelectedWholesaleCustomer] = useState<WholesaleCustomerData | null>(null)
   const [amount, setAmount] = useState('')
+  const [cashAmount, setCashAmount] = useState('')
   const [reference, setReference] = useState('')
   const [category, setCategory] = useState<'DHIRAAGU_BILLS' | 'WHOLESALE_RELOAD'>('DHIRAAGU_BILLS')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [limitWarningData, setLimitWarningData] = useState<LimitWarningData | null>(null)
   const [resolvedEntryId, setResolvedEntryId] = useState<string | null>(dailyEntryId)
+
+  // Wholesale calculator — use the selected wholesale customer for discount override
+  const isWholesale = category === 'WHOLESALE_RELOAD'
+  const numCashAmount = parseFloat(cashAmount) || 0
+  const wholesaleDiscount = isWholesale && numCashAmount > 0
+    ? wholesale.getDiscount(numCashAmount, selectedWholesaleCustomer)
+    : null
+  const wholesaleReloadAmount = wholesaleDiscount != null && numCashAmount > 0
+    ? wholesale.calculateReload(numCashAmount, wholesaleDiscount)
+    : null
 
   useEffect(() => {
     setResolvedEntryId(dailyEntryId)
@@ -106,7 +121,9 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
 
   const resetForm = () => {
     setSelectedCustomer(null)
+    setSelectedWholesaleCustomer(null)
     setAmount('')
+    setCashAmount('')
     setReference('')
     setCategory('DHIRAAGU_BILLS')
     setSearchQuery('')
@@ -143,6 +160,28 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
       entryId = savedId
     }
 
+    if (isWholesale) {
+      if (!selectedWholesaleCustomer) {
+        toast.error('Please select a wholesale customer')
+        return
+      }
+      if (!numCashAmount || numCashAmount <= 0) {
+        toast.error('Please enter a valid cash amount')
+        return
+      }
+      if (wholesale.minCashAmount && numCashAmount < wholesale.minCashAmount) {
+        toast.error(`Minimum cash amount is ${wholesale.minCashAmount.toLocaleString()} MVR`)
+        return
+      }
+      if (wholesaleDiscount == null || wholesaleReloadAmount == null) {
+        toast.error('Cash amount does not qualify for any discount tier')
+        return
+      }
+      // Wholesale credit: no local credit limit check — API will handle it
+      submitCreditSale(false, entryId)
+      return
+    }
+
     if (!selectedCustomer) {
       toast.error('Please select a customer')
       return
@@ -175,24 +214,40 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
 
   const submitCreditSale = async (overrideLimit: boolean = false, entryIdOverride?: string) => {
     const id = entryIdOverride ?? resolvedEntryId
-    if (!id || !selectedCustomer) return
+    if (!id) return
+
+    // For wholesale: need wholesale customer. For regular: need credit customer.
+    if (isWholesale && !selectedWholesaleCustomer) return
+    if (!isWholesale && !selectedCustomer) return
 
     setIsSubmitting(true)
     setShowLimitWarning(false)
 
     try {
+      const submitAmount = isWholesale && wholesaleReloadAmount ? wholesaleReloadAmount : parseFloat(amount)
+      const customerName = isWholesale ? selectedWholesaleCustomer!.name : selectedCustomer!.name
+
+      const body: Record<string, unknown> = {
+        dailyEntryId: id,
+        amount: submitAmount,
+        cashAmount: isWholesale ? numCashAmount : null,
+        discountPercent: isWholesale ? wholesaleDiscount : null,
+        reference: reference || null,
+        category,
+        overrideLimit,
+      }
+
+      if (isWholesale) {
+        body.wholesaleCustomerId = selectedWholesaleCustomer!.id
+      } else {
+        body.customerId = selectedCustomer!.id
+        body.customerType = selectedCustomer!.type
+      }
+
       const response = await fetch('/api/credit-sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dailyEntryId: id,
-          customerId: selectedCustomer.id,
-          amount: parseFloat(amount),
-          reference: reference || null,
-          customerType: selectedCustomer.type,
-          category,
-          overrideLimit,
-        }),
+        body: JSON.stringify(body),
       })
 
       const data = await response.json()
@@ -205,7 +260,7 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
         } else if (data.warning) {
           toast.warning(data.warning)
         } else {
-          toast.success(`Credit sale of ${amount} MVR added for ${selectedCustomer.name}`)
+          toast.success(`Credit sale added for ${customerName}`)
         }
         handleOpenChange(false)
         onSaleAdded()
@@ -223,8 +278,8 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
     }
   }
 
-  const parsedAmount = parseFloat(amount)
-  const newAmountValue = !isNaN(parsedAmount) && parsedAmount > 0 ? parsedAmount : undefined
+  // For CustomerInfoCard: show the credit balance impact (non-wholesale only)
+  const newAmountValue = !isWholesale && parseFloat(amount) > 0 ? parseFloat(amount) : undefined
 
   return (
     <>
@@ -246,7 +301,13 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Category *</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v as 'DHIRAAGU_BILLS' | 'WHOLESALE_RELOAD')}>
+              <Select value={category} onValueChange={(v) => {
+                setCategory(v as 'DHIRAAGU_BILLS' | 'WHOLESALE_RELOAD')
+                setSelectedCustomer(null)
+                setSelectedWholesaleCustomer(null)
+                setCashAmount('')
+                setAmount('')
+              }}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -260,49 +321,113 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Customer *</Label>
-                <CustomerFormDialog
-                  onSubmit={handleCreateCustomer}
-                  trigger={
-                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 px-2">
-                      <Plus className="h-3 w-3" />
-                      New Customer
-                    </Button>
-                  }
+            {isWholesale ? (
+              <div className="space-y-2">
+                <Label>Wholesale Customer *</Label>
+                <WholesaleCustomerSelector
+                  customers={wholesale.customers}
+                  selectedCustomer={selectedWholesaleCustomer}
+                  isLoading={wholesale.isLoading}
+                  onSelect={(c) => setSelectedWholesaleCustomer(c)}
+                  searchQuery={wholesale.search}
+                  onSearchChange={wholesale.setSearch}
+                />
+                {selectedWholesaleCustomer?.discountOverride != null && (
+                  <p className="text-xs text-muted-foreground">
+                    Fixed discount: {selectedWholesaleCustomer.discountOverride}%
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Customer *</Label>
+                  <CustomerFormDialog
+                    onSubmit={handleCreateCustomer}
+                    trigger={
+                      <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 px-2">
+                        <Plus className="h-3 w-3" />
+                        New Customer
+                      </Button>
+                    }
+                  />
+                </div>
+                <CustomerSelector
+                  customers={customers}
+                  selectedCustomer={selectedCustomer}
+                  isLoading={isLoadingCustomers}
+                  open={customerSelectOpen}
+                  onOpenChange={setCustomerSelectOpen}
+                  onSelect={handleCustomerSelect}
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
                 />
               </div>
-              <CustomerSelector
-                customers={customers}
-                selectedCustomer={selectedCustomer}
-                isLoading={isLoadingCustomers}
-                open={customerSelectOpen}
-                onOpenChange={setCustomerSelectOpen}
-                onSelect={handleCustomerSelect}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-              />
-            </div>
+            )}
 
-            {selectedCustomer && (
+            {!isWholesale && selectedCustomer && (
               <CustomerInfoCard customer={selectedCustomer} newAmount={newAmountValue} />
             )}
 
 
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount (MVR) *</Label>
-              <Input
-                id="amount"
-                type="number"
-                min="0"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="font-mono"
-              />
-            </div>
+            {isWholesale ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="cashAmount">Cash Amount (MVR) *</Label>
+                  <Input
+                    id="cashAmount"
+                    type="text"
+                    inputMode="decimal"
+                    value={cashAmount}
+                    onChange={(e) => {
+                      if (e.target.value === '' || /^\d*\.?\d*$/.test(e.target.value)) {
+                        setCashAmount(e.target.value)
+                      }
+                    }}
+                    placeholder={wholesale.minCashAmount ? `Min ${wholesale.minCashAmount}` : '0.00'}
+                    className="font-mono"
+                  />
+                </div>
+                {numCashAmount > 0 && (
+                  <div className="rounded-md bg-muted/50 p-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Discount</span>
+                      <span className="font-medium">
+                        {wholesaleDiscount != null ? `${wholesaleDiscount}%` : 'Below min threshold'}
+                      </span>
+                    </div>
+                    {wholesaleReloadAmount != null && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Reload (wallet deduction)</span>
+                        <span className="font-mono font-semibold text-primary">
+                          {wholesaleReloadAmount.toLocaleString()} MVR
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Credit balance (owes)</span>
+                      <span className="font-mono font-semibold text-amber-600">
+                        {numCashAmount.toLocaleString()} MVR
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="amount">Amount (MVR) *</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="font-mono"
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="reference">Reference (optional)</Label>

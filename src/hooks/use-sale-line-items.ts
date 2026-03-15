@@ -31,7 +31,7 @@ interface UseSaleLineItemsReturn {
   ) => boolean
   addLineItem: (
     data: CreateSaleLineItemDto
-  ) => Promise<{ success: boolean; cellTotal?: number; cellCount?: number }>
+  ) => Promise<{ success: boolean; cellTotal?: number; cellCount?: number; error?: string }>
   editLineItem: (
     id: string,
     data: EditSaleLineItemDto
@@ -131,7 +131,7 @@ export function useSaleLineItems(dailyEntryId: string | null): UseSaleLineItemsR
           cellCount: result.data.cellCount,
         }
       }
-      return { success: false }
+      return { success: false, error: result.error }
     },
     [api]
   )

@@ -18,11 +18,21 @@ async function syncCellTotal(
   customerType: CustomerType,
   paymentMethod: PaymentMethod
 ): Promise<number> {
-  const agg = await prisma.saleLineItem.aggregate({
-    where: { dailyEntryId, category, customerType, paymentMethod },
-    _sum: { amount: true },
-  })
-  const total = Number(agg._sum.amount ?? 0)
+  // For wholesale reload: grid shows cash received (cashAmount), not reload amount
+  let total: number
+  if (category === "WHOLESALE_RELOAD") {
+    const items = await prisma.saleLineItem.findMany({
+      where: { dailyEntryId, category, customerType, paymentMethod },
+      select: { amount: true, cashAmount: true },
+    })
+    total = items.reduce((sum, item) => sum + Number(item.cashAmount ?? item.amount), 0)
+  } else {
+    const agg = await prisma.saleLineItem.aggregate({
+      where: { dailyEntryId, category, customerType, paymentMethod },
+      _sum: { amount: true },
+    })
+    total = Number(agg._sum.amount ?? 0)
+  }
   const fieldName = getCategoryFieldName(customerType, paymentMethod)
 
   const existing = await prisma.dailyEntryCategory.findUnique({

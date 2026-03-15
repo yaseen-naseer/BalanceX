@@ -96,13 +96,19 @@ export const updateCreditCustomerSchema = z.object({
 
 export const createCreditSaleSchema = z.object({
   dailyEntryId: z.string().cuid("Invalid daily entry ID"),
-  customerId: z.string().cuid("Invalid customer ID"),
+  customerId: z.string().cuid("Invalid customer ID").optional(),
+  wholesaleCustomerId: z.string().cuid("Invalid wholesale customer ID").optional(),
   amount: positiveNumberSchema,
+  cashAmount: positiveNumberSchema.optional().nullable(),
+  discountPercent: z.number().min(6).max(8).optional().nullable(),
   reference: z.string().max(100).optional().nullable(),
   customerType: customerTypeSchema.optional(),
   category: z.enum(["DHIRAAGU_BILLS", "WHOLESALE_RELOAD"]).optional().default("DHIRAAGU_BILLS"),
   overrideLimit: z.boolean().optional(),
-})
+}).refine(
+  (data) => data.customerId || data.wholesaleCustomerId,
+  { message: "Either customerId or wholesaleCustomerId is required" }
+)
 
 // ============================================
 // Settlement Schema
@@ -301,6 +307,38 @@ export const createSaleLineItemSchema = z.object({
   amount: positiveNumberSchema,
   serviceNumber: z.string().max(50).optional().nullable(),
   note: z.string().max(500).optional().nullable(),
+  wholesaleCustomerId: z.string().cuid().optional().nullable(),
+  cashAmount: positiveNumberSchema.optional().nullable(),
+  discountPercent: z.number().min(6).max(8).optional().nullable(),
+})
+
+// ============================================
+// Wholesale Customer Schemas
+// ============================================
+
+const wholesaleDiscountValues = [6.0, 6.5, 7.0, 7.5, 8.0] as const
+
+export const createWholesaleCustomerSchema = z.object({
+  name: z.string().min(1, "Name is required").max(100, "Name too long"),
+  phone: z.string().min(1, "Phone is required").max(20, "Phone too long"),
+  businessName: z.string().max(100).optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+  discountOverride: z.number().refine(
+    (v) => wholesaleDiscountValues.includes(v as (typeof wholesaleDiscountValues)[number]),
+    { message: "Discount must be 6.0, 6.5, 7.0, 7.5, or 8.0" }
+  ).optional().nullable(),
+})
+
+export const updateWholesaleCustomerSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  phone: z.string().min(1).max(20).optional(),
+  businessName: z.string().max(100).optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+  discountOverride: z.number().refine(
+    (v) => wholesaleDiscountValues.includes(v as (typeof wholesaleDiscountValues)[number]),
+    { message: "Discount must be 6.0, 6.5, 7.0, 7.5, or 8.0" }
+  ).optional().nullable(),
+  isActive: z.boolean().optional(),
 })
 
 // ============================================

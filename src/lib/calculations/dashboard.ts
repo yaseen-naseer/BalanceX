@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db'
 import type { DashboardAlert } from '@/types'
+import { calculateReloadWalletCost } from '@/lib/utils/balance'
+import { getWholesaleReloadTotal } from '@/lib/utils/wholesale-reload'
 
 /**
  * Calculate revenue for a daily entry's categories
@@ -136,10 +138,11 @@ export function calculateBankBalance(
 /**
  * Calculate wallet balance
  */
-export function calculateWalletBalance(
+export async function calculateWalletBalance(
   settings: { openingBalance: unknown } | null,
   topups: Array<{ amount: unknown }>,
   reloadCategories: Array<{
+    category: string
     consumerCash: unknown
     consumerTransfer: unknown
     consumerCredit: unknown
@@ -147,10 +150,11 @@ export function calculateWalletBalance(
     corporateTransfer: unknown
     corporateCredit: unknown
   }>
-): number {
+): Promise<number> {
   const opening = settings ? Number(settings.openingBalance) : 0
   const totalTopups = topups.reduce((sum, t) => sum + Number(t.amount), 0)
-  const totalReloadSales = calculateCategoryRevenue(reloadCategories)
+  const wholesaleReload = await getWholesaleReloadTotal()
+  const totalReloadSales = calculateReloadWalletCost(reloadCategories, wholesaleReload)
   return opening + totalTopups - totalReloadSales
 }
 

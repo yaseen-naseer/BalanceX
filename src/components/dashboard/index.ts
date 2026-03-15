@@ -10,3 +10,5 @@ export type { TodayBreakdown, TodayBreakdownTableProps } from './breakdown-table
 
 export { ActivityFeed } from './activity-feed'
 export type { ActivityItem, ActivityFeedProps } from './activity-feed'
+
+export { WhatsNewDialog, openWhatsNew } from './whats-new-dialog'

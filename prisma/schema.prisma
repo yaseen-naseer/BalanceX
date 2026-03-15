@@ -204,18 +204,23 @@ model CreditCustomer {
 // 8. CREDIT SALE - Individual credit sale linked to daily entry
 // ============================================
 model CreditSale {
-  id           String       @id @default(cuid())
-  dailyEntryId String
-  customerId   String
-  category     CategoryType @default(DHIRAAGU_BILLS)
-  amount       Decimal      @db.Decimal(12, 2)
-  reference    String?
-  createdAt    DateTime     @default(now())
+  id                  String       @id @default(cuid())
+  dailyEntryId        String
+  customerId          String
+  wholesaleCustomerId String?
+  category            CategoryType @default(DHIRAAGU_BILLS)
+  amount              Decimal      @db.Decimal(12, 2) // For wholesale: reload amount (wallet deduction)
+  cashAmount          Decimal?     @db.Decimal(12, 2) // Wholesale only: cash owed by customer
+  discountPercent     Decimal?     @db.Decimal(4, 2)  // Wholesale only: discount % applied
+  reference           String?
+  createdAt           DateTime     @default(now())
 
   // Relations
-  dailyEntry DailyEntry     @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
-  customer   CreditCustomer @relation(fields: [customerId], references: [id])
+  dailyEntry         DailyEntry         @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+  customer           CreditCustomer     @relation(fields: [customerId], references: [id])
+  wholesaleCustomer  WholesaleCustomer? @relation(fields: [wholesaleCustomerId], references: [id])
 
+  @@index([wholesaleCustomerId])
   @@map("credit_sales")
 }
 
@@ -230,6 +235,7 @@ enum CreditTransactionType {
 enum PaymentMethod {
   CASH
   TRANSFER
+  CREDIT
 }
 
 model CreditTransaction {
@@ -535,10 +541,53 @@ model SaleLineItem {
   createdBy     String
   createdAt     DateTime      @default(now())
 
+  wholesaleCustomerId String?
+  cashAmount          Decimal?  @db.Decimal(12, 2)  // What retailer paid/owes (wholesale only)
+  discountPercent     Decimal?  @db.Decimal(4, 2)   // Discount % applied (wholesale only)
+
   // Relations
-  dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
-  user       User       @relation(fields: [createdBy], references: [id])
+  dailyEntry         DailyEntry          @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [createdBy], references: [id])
+  wholesaleCustomer  WholesaleCustomer?  @relation(fields: [wholesaleCustomerId], references: [id])
 
   @@index([dailyEntryId, category, customerType, paymentMethod])
+  @@index([wholesaleCustomerId])
   @@map("sale_line_items")
+}
+
+// ============================================
+// 20. WHOLESALE CUSTOMER - Track wholesale reload buyers
+// ============================================
+model WholesaleCustomer {
+  id               String   @id @default(cuid())
+  name             String
+  phone            String   @unique
+  businessName     String?
+  notes            String?  @db.Text
+  discountOverride Decimal? @db.Decimal(4, 2)  // null = auto (global tiers), or fixed % (6.0-8.0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  saleLineItems SaleLineItem[]
+  creditSales   CreditSale[]
+
+  @@map("wholesale_customers")
+}
+
+// ============================================
+// WHOLESALE DISCOUNT TIERS - Global settings
+// ============================================
+model WholesaleDiscountTier {
+  id              String   @id @default(cuid())
+  discountPercent Decimal  @db.Decimal(4, 2)  // Fixed: 6.0, 6.5, 7.0, 7.5, 8.0
+  minCashAmount   Decimal  @db.Decimal(12, 2) // Min cash amount to qualify
+  isActive        Boolean  @default(true)
+  sortOrder       Int                          // 1-5
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([discountPercent])
+  @@map("wholesale_discount_tiers")
 }

@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db"
+import { stripRetailGst } from "@/lib/utils/balance"
+import { getWholesaleReloadTotal } from "@/lib/utils/wholesale-reload"
 
 export interface WalletCalculation {
   opening: {
@@ -113,16 +115,21 @@ export async function calculateWallet(
         corporate: corporateTotal,
         total: categoryTotal,
       }
+      // Retail reload includes 8% GST — wallet cost is the pre-GST amount
+      reloadSalesUsed.total += stripRetailGst(categoryTotal)
     } else if (cat.category === "WHOLESALE_RELOAD") {
+      // Category grid stores cash received; wallet cost comes from line items (reload amount)
       reloadSalesUsed.wholesaleReload = {
         consumer: consumerTotal,
         corporate: corporateTotal,
         total: categoryTotal,
       }
     }
-
-    reloadSalesUsed.total += categoryTotal
   }
+
+  // Wholesale wallet cost: sum of reload amounts from line items (not category grid)
+  const wholesaleWalletCost = await getWholesaleReloadTotal({ dailyEntryId: entryId })
+  reloadSalesUsed.total += wholesaleWalletCost
 
   const closingActual = entry.wallet ? Number(entry.wallet.closingActual) : 0
   const closingExpected = opening.balance + topups.total - reloadSalesUsed.total

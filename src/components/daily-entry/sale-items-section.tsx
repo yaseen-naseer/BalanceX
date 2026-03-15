@@ -271,6 +271,16 @@ export function SaleItemsSection({
                           <span className="font-mono font-medium whitespace-nowrap">
                             {Number(item.amount).toLocaleString()} MVR
                           </span>
+                          {item.wholesaleCustomer && (
+                            <span className="text-xs bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded px-1.5 py-0.5 truncate" title={`${item.wholesaleCustomer.name} (${item.wholesaleCustomer.phone})`}>
+                              {item.wholesaleCustomer.name}
+                            </span>
+                          )}
+                          {item.cashAmount != null && item.discountPercent != null && (
+                            <span className="text-xs text-muted-foreground whitespace-nowrap" title={`Cash: ${Number(item.cashAmount).toLocaleString()} MVR, Discount: ${Number(item.discountPercent)}%`}>
+                              💵{Number(item.cashAmount).toLocaleString()} @ {Number(item.discountPercent)}%
+                            </span>
+                          )}
                           {item.serviceNumber && (
                             <span className="text-muted-foreground truncate text-xs" title={item.serviceNumber}>
                               #{item.serviceNumber}
