@@ -233,9 +233,9 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   hasUserChangesRef.current = hasUserChanges
 
   // Live polling — detect remote changes and refetch
-  // Always poll (both editor and viewer tabs), but only refresh the full entry
-  // when the user has no unsaved grid edits. Line items, credit sales, and wallet
+  // Always poll (both editor and viewer tabs). Line items, credit sales, and wallet
   // always refresh since they are server-authoritative (saved immediately).
+  // Grid cells with line items are patched directly from refreshed line item data.
   const pollUrl = entry?.id ? `/api/daily-entries/${date}/poll` : null
   const { isLive, lastChecked } = useLivePolling({
     url: pollUrl,
@@ -245,12 +245,47 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
       // Always refresh server-authoritative data
       await refreshLineItems()
       fetchWallet()
-      // Only refresh the full entry (grid data) when user has no local edits
-      if (!hasUserChangesRef.current) {
-        await fetchEntry(date, { silent: true })
-      }
+      // Refresh the full entry (includes grid data, credit sales, etc.)
+      await fetchEntry(date, { silent: true })
     }, [fetchEntry, date, refreshLineItems, fetchWallet]),
   })
+
+  // When line items change, patch grid cells that are backed by line items
+  // This ensures the category grid stays in sync with line item totals
+  const prevLineItemsRef = useRef<SaleLineItemData[]>([])
+  useEffect(() => {
+    if (saleLineItems === prevLineItemsRef.current) return
+    prevLineItemsRef.current = saleLineItems
+    if (saleLineItems.length === 0) return
+
+    // Group line items by cell and compute totals
+    const cellTotals = new Map<string, number>()
+    for (const li of saleLineItems) {
+      const ct = li.customerType.toLowerCase()
+      const pm = li.paymentMethod.toLowerCase()
+      const fieldKey = `${ct}${pm.charAt(0).toUpperCase() + pm.slice(1)}`
+      const cellKey = `${li.category}:${fieldKey}`
+      // Wholesale grid shows cash received, others show amount
+      const value = li.category === "WHOLESALE_RELOAD" ? Number(li.cashAmount ?? li.amount) : Number(li.amount)
+      cellTotals.set(cellKey, (cellTotals.get(cellKey) || 0) + value)
+    }
+
+    if (cellTotals.size === 0) return
+
+    setLocalData((prev) => {
+      const next = { ...prev, categories: { ...prev.categories } }
+      let changed = false
+      for (const [cellKey, total] of cellTotals) {
+        const [category, fieldKey] = cellKey.split(":")
+        const cat = prev.categories[category as Category]
+        if (cat && cat[fieldKey as keyof typeof cat] !== total) {
+          next.categories[category as Category] = { ...cat, [fieldKey]: total }
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [saleLineItems])
 
   // Check edit permissions
   const editPermission = useMemo(() => {
