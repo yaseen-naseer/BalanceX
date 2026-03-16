@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useCallback, useEffect, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { useDailyEntry, type CalculationData } from "./use-daily-entry"
 import { useWallet } from "./use-wallet"
 import { useAuth } from "./use-auth"
 import { useSaleLineItems } from "./use-sale-line-items"
+import { useLivePolling } from "./use-live-polling"
 import { canEditDailyEntry } from "@/lib/permissions"
 import { stripRetailGst } from "@/lib/utils/balance"
 import type { DailyEntryWithRelations, CreateDailyEntryDto, UpdateDailyEntryDto, SaleLineItemData, CreateSaleLineItemDto } from "@/types"
@@ -147,6 +148,10 @@ export interface UseDailyEntryFormReturn {
   isReadOnly: boolean
   editPermission: { canEdit: boolean; reason?: string }
 
+  // Live polling
+  isLive: boolean
+  lastChecked: Date | null
+
   // Wallet opening override
   walletOpeningSource: string
   walletOpeningReason: string | null
@@ -224,6 +229,21 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   const [hasUserChanges, setHasUserChanges] = useState(false)
   const [walletOpeningSource, setWalletOpeningSource] = useState<string>("PREVIOUS_DAY")
   const [walletOpeningReason, setWalletOpeningReason] = useState<string | null>(null)
+  const hasUserChangesRef = useRef(false)
+  hasUserChangesRef.current = hasUserChanges
+
+  // Live polling — detect remote changes and refetch
+  const pollUrl = entry?.id ? `/api/daily-entries/${date}/poll` : null
+  const { isLive, lastChecked } = useLivePolling({
+    url: pollUrl,
+    intervalMs: 10_000,
+    enabled: !hasUserChanges && !isLoading && !isSaving && !isSubmitting,
+    onUpdate: useCallback(async () => {
+      await fetchEntry(date, { silent: true })
+      await refreshLineItems()
+      fetchWallet()
+    }, [fetchEntry, date, refreshLineItems, fetchWallet]),
+  })
 
   // Check edit permissions
   const editPermission = useMemo(() => {
@@ -237,6 +257,8 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   useEffect(() => {
     // Don't reset to zeros while still loading — entry is temporarily null
     if (isLoading) return
+    // Don't overwrite local edits from a background refetch
+    if (hasUserChangesRef.current) return
     setLocalData(entryToLocalData(entry))
     setHasUserChanges(false)
     setWalletAutoLoaded(false)
@@ -726,6 +748,10 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     isSubmitted,
     isReadOnly,
     editPermission,
+
+    // Live polling
+    isLive,
+    lastChecked,
 
     // Wallet opening override
     walletOpeningSource,

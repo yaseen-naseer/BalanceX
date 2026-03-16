@@ -36,7 +36,7 @@ interface UseDailyEntryReturn {
   calculationData: CalculationData
   isLoading: boolean
   error: string | null
-  fetchEntry: (date: string) => Promise<void>
+  fetchEntry: (date: string, options?: { silent?: boolean }) => Promise<void>
   createEntry: (data: CreateDailyEntryDto) => Promise<DailyEntryWithRelations | null>
   updateEntry: (date: string, data: UpdateDailyEntryDto) => Promise<DailyEntryWithRelations | null>
   submitEntry: (date: string, acknowledgeWarnings?: boolean) => Promise<SubmitResult>
@@ -56,9 +56,11 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
   const [error, setError] = useState<string | null>(null)
   const api = useApiClient()
 
-  const fetchEntry = useCallback(async (fetchDate: string) => {
-    setIsLoading(true)
-    setError(null)
+  const fetchEntry = useCallback(async (fetchDate: string, options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setIsLoading(true)
+      setError(null)
+    }
 
     try {
       const response = await fetch(`/api/daily-entries/${fetchDate}`)
@@ -71,13 +73,17 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
       } else if (response.status === 404) {
         setEntry(null)
         setCalculationData(defaultCalculationData)
-      } else {
+      } else if (!options?.silent) {
         setError(result.error || "Failed to fetch entry")
       }
     } catch {
-      setError("Network error")
+      if (!options?.silent) {
+        setError("Network error")
+      }
     }
-    setIsLoading(false)
+    if (!options?.silent) {
+      setIsLoading(false)
+    }
   }, [])
 
   const createEntry = useCallback(async (

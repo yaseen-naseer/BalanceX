@@ -301,15 +301,23 @@ export default function DailyEntryPage() {
             {form.isLoading ? (
               <Skeleton className="h-6 w-20" />
             ) : (
-              <Badge variant={form.isSubmitted ? 'default' : 'secondary'}>
-                {form.isSubmitted ? (
-                  <>
-                    <CheckCircle2 className="mr-1 h-3 w-3" /> Submitted
-                  </>
-                ) : (
-                  'Draft'
+              <>
+                <Badge variant={form.isSubmitted ? 'default' : 'secondary'}>
+                  {form.isSubmitted ? (
+                    <>
+                      <CheckCircle2 className="mr-1 h-3 w-3" /> Submitted
+                    </>
+                  ) : (
+                    'Draft'
+                  )}
+                </Badge>
+                {form.isLive && !form.isDirty && (
+                  <Badge variant="outline" className="gap-1.5 text-xs text-emerald-600 border-emerald-300">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Live
+                  </Badge>
                 )}
-              </Badge>
+              </>
             )}
           </div>
           <div className="flex items-center gap-2">
