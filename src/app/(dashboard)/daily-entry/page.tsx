@@ -311,7 +311,7 @@ export default function DailyEntryPage() {
                     'Draft'
                   )}
                 </Badge>
-                {form.isLive && !form.isDirty && (
+                {form.isLive && (
                   <Badge variant="outline" className="gap-1.5 text-xs text-emerald-600 border-emerald-300">
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                     Live

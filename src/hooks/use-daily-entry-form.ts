@@ -233,15 +233,22 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   hasUserChangesRef.current = hasUserChanges
 
   // Live polling — detect remote changes and refetch
+  // Always poll (both editor and viewer tabs), but only refresh the full entry
+  // when the user has no unsaved grid edits. Line items, credit sales, and wallet
+  // always refresh since they are server-authoritative (saved immediately).
   const pollUrl = entry?.id ? `/api/daily-entries/${date}/poll` : null
   const { isLive, lastChecked } = useLivePolling({
     url: pollUrl,
     intervalMs: 10_000,
-    enabled: !hasUserChanges && !isLoading && !isSaving && !isSubmitting,
+    enabled: !isLoading && !isSaving && !isSubmitting,
     onUpdate: useCallback(async () => {
-      await fetchEntry(date, { silent: true })
+      // Always refresh server-authoritative data
       await refreshLineItems()
       fetchWallet()
+      // Only refresh the full entry (grid data) when user has no local edits
+      if (!hasUserChangesRef.current) {
+        await fetchEntry(date, { silent: true })
+      }
     }, [fetchEntry, date, refreshLineItems, fetchWallet]),
   })
 
