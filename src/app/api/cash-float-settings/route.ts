@@ -8,6 +8,7 @@ import {
   validateRequestBody,
 } from "@/lib/validations"
 import { z } from "zod"
+import { logError } from "@/lib/logger"
 
 // Schema for PATCH (includes id)
 const patchCashFloatSettingsSchema = z.object({
@@ -33,7 +34,7 @@ export async function GET() {
       })),
     })
   } catch (error) {
-    console.error("Error fetching cash float settings:", error)
+    logError("Error fetching cash float settings", error)
     return NextResponse.json(
       { success: false, error: "Failed to fetch float settings" },
       { status: 500 }
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error("Error creating cash float setting:", error)
+    logError("Error creating cash float setting", error)
     return NextResponse.json(
       { success: false, error: "Failed to create float setting" },
       { status: 500 }
@@ -124,7 +125,7 @@ export async function PATCH(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Error updating cash float setting:", error)
+    logError("Error updating cash float setting", error)
     return NextResponse.json(
       { success: false, error: "Failed to update float setting" },
       { status: 500 }
@@ -155,7 +156,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deactivating cash float setting:", error)
+    logError("Error deactivating cash float setting", error)
     return NextResponse.json(
       { success: false, error: "Failed to deactivate float setting" },
       { status: 500 }

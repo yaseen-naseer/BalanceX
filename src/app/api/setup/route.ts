@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
+import { Prisma } from "@prisma/client"
 import bcrypt from "bcryptjs"
+import { BCRYPT_ROUNDS } from "@/lib/constants"
 import { z } from "zod"
 import { createAuditLog } from "@/lib/audit"
+import { ApiErrors } from "@/lib/api-response"
+import { logError } from "@/lib/logger"
 
 // GET /api/setup — check whether setup is still needed (public)
 export async function GET() {
@@ -40,10 +44,7 @@ export async function POST(request: NextRequest) {
   // Guard: refuse if setup is already done
   const count = await prisma.user.count()
   if (count > 0) {
-    return NextResponse.json(
-      { success: false, error: "Setup has already been completed" },
-      { status: 403 }
-    )
+    return ApiErrors.forbidden("Setup has already been completed")
   }
 
   let body: z.infer<typeof setupSchema>
@@ -52,14 +53,14 @@ export async function POST(request: NextRequest) {
     const result = setupSchema.safeParse(raw)
     if (!result.success) {
       const message = result.error.issues.map((i) => i.message).join(", ")
-      return NextResponse.json({ success: false, error: message }, { status: 400 })
+      return ApiErrors.badRequest(message)
     }
     body = result.data
   } catch {
-    return NextResponse.json({ success: false, error: "Invalid request body" }, { status: 400 })
+    return ApiErrors.badRequest("Invalid request body")
   }
 
-  const passwordHash = await bcrypt.hash(body.owner.password, 10)
+  const passwordHash = await bcrypt.hash(body.owner.password, BCRYPT_ROUNDS)
   const bankDate = new Date(body.bank.openingDate)
   bankDate.setUTCHours(0, 0, 0, 0)
   const walletDate = new Date(body.wallet.openingDate)
@@ -106,17 +107,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : ""
-    if (msg.includes("Unique constraint") || msg.includes("username")) {
-      return NextResponse.json(
-        { success: false, error: "Username already taken" },
-        { status: 409 }
-      )
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return ApiErrors.conflict("Username already taken")
     }
-    console.error("Setup error:", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to complete setup" },
-      { status: 500 }
-    )
+    logError("Setup error", error)
+    return ApiErrors.serverError("Failed to complete setup")
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { requireRole } from "@/lib/api-auth"
 import { paginatedResponse, ApiErrors } from "@/lib/api-response"
+import { logError } from "@/lib/logger"
 import { AuditAction } from "@prisma/client"
 
 export async function GET(request: NextRequest) {
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(rows, { total, limit: limitParam, offset: offsetParam })
   } catch (error) {
-    console.error("Error fetching audit logs:", error)
+    logError("Error fetching audit logs", error)
     return ApiErrors.serverError()
   }
 }

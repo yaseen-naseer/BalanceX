@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Banknote, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { CASH_VARIANCE_THRESHOLD, WALLET_VARIANCE_THRESHOLD, CURRENCY_CODE } from '@/lib/constants'
 import type { DailyEntryWithRelations } from '@/types'
 import type { CalculationData } from '@/hooks/use-daily-entry'
 import type { EntryTotals } from './types'
@@ -111,7 +112,7 @@ export function ReconciliationCard({
               <span className="font-medium text-sm">Bank Deposit:</span>
             </div>
             <span className="font-mono text-sm font-semibold text-blue-600">
-              MVR {Number(entry.cashDrawer.bankDeposits).toLocaleString()}
+              {CURRENCY_CODE} {Number(entry.cashDrawer.bankDeposits).toLocaleString()}
             </span>
           </div>
         )}
@@ -160,7 +161,7 @@ function CashDrawerCalculation({
         'rounded-lg border p-3 space-y-2',
         cashDrawer.variance === 0
           ? 'bg-muted/50'
-          : Math.abs(Number(cashDrawer.variance)) > 500
+          : Math.abs(Number(cashDrawer.variance)) > CASH_VARIANCE_THRESHOLD
             ? 'bg-rose-50 border-rose-200'
             : 'bg-amber-50 border-amber-200'
       )}
@@ -174,14 +175,14 @@ function CashDrawerCalculation({
           variant={
             cashDrawer.variance === 0
               ? 'default'
-              : Math.abs(Number(cashDrawer.variance)) > 500
+              : Math.abs(Number(cashDrawer.variance)) > CASH_VARIANCE_THRESHOLD
                 ? 'destructive'
                 : 'secondary'
           }
         >
           {cashDrawer.variance === 0
             ? 'Balanced'
-            : Math.abs(Number(cashDrawer.variance)) > 500
+            : Math.abs(Number(cashDrawer.variance)) > CASH_VARIANCE_THRESHOLD
               ? 'High Variance'
               : 'Minor Variance'}
         </Badge>
@@ -262,7 +263,7 @@ function WalletCalculation({ wallet, reloadSales, walletTopupsTotal }: WalletCal
         'rounded-lg border p-3 space-y-2',
         wallet.variance === 0
           ? 'bg-muted/50'
-          : Math.abs(Number(wallet.variance)) > 500
+          : Math.abs(Number(wallet.variance)) > WALLET_VARIANCE_THRESHOLD
             ? 'bg-rose-50 border-rose-200'
             : 'bg-amber-50 border-amber-200'
       )}
@@ -276,14 +277,14 @@ function WalletCalculation({ wallet, reloadSales, walletTopupsTotal }: WalletCal
           variant={
             wallet.variance === 0
               ? 'default'
-              : Math.abs(Number(wallet.variance)) > 500
+              : Math.abs(Number(wallet.variance)) > WALLET_VARIANCE_THRESHOLD
                 ? 'destructive'
                 : 'secondary'
           }
         >
           {wallet.variance === 0
             ? 'Balanced'
-            : Math.abs(Number(wallet.variance)) > 500
+            : Math.abs(Number(wallet.variance)) > WALLET_VARIANCE_THRESHOLD
               ? 'High Variance'
               : 'Minor Variance'}
         </Badge>

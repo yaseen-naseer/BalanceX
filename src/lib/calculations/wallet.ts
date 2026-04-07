@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db"
 import { stripRetailGst } from "@/lib/utils/balance"
 import { getWholesaleReloadTotal } from "@/lib/utils/wholesale-reload"
+import { toNum } from "@/lib/utils/decimal"
 
 export interface WalletCalculation {
   opening: {
@@ -51,7 +52,7 @@ export async function calculateWallet(
   }
 
   if (entry.wallet) {
-    opening.balance = Number(entry.wallet.opening)
+    opening.balance = toNum(entry.wallet.opening)
     opening.source = entry.wallet.openingSource.toLowerCase() as typeof opening.source
   } else {
     // Try to get from previous day
@@ -64,7 +65,7 @@ export async function calculateWallet(
     })
 
     if (previousEntry?.wallet) {
-      opening.balance = Number(previousEntry.wallet.closingActual)
+      opening.balance = toNum(previousEntry.wallet.closingActual)
       opening.source = "previous_day"
       opening.previousDate = previousDate
     } else {
@@ -74,7 +75,7 @@ export async function calculateWallet(
       })
 
       if (settings) {
-        opening.balance = Number(settings.openingBalance)
+        opening.balance = toNum(settings.openingBalance)
         opening.source = "initial_setup"
       }
     }
@@ -88,11 +89,11 @@ export async function calculateWallet(
   const topups = {
     fromCash: topupsData
       .filter((t) => t.source === "CASH")
-      .reduce((sum, t) => sum + Number(t.amount), 0),
+      .reduce((sum, t) => sum + toNum(t.amount), 0),
     fromBank: topupsData
       .filter((t) => t.source === "BANK")
-      .reduce((sum, t) => sum + Number(t.amount), 0),
-    total: topupsData.reduce((sum, t) => sum + Number(t.amount), 0),
+      .reduce((sum, t) => sum + toNum(t.amount), 0),
+    total: topupsData.reduce((sum, t) => sum + toNum(t.amount), 0),
   }
 
   // Calculate reload sales used
@@ -104,9 +105,9 @@ export async function calculateWallet(
 
   for (const cat of entry.categories) {
     const consumerTotal =
-      Number(cat.consumerCash) + Number(cat.consumerTransfer) + Number(cat.consumerCredit)
+      toNum(cat.consumerCash) + toNum(cat.consumerTransfer) + toNum(cat.consumerCredit)
     const corporateTotal =
-      Number(cat.corporateCash) + Number(cat.corporateTransfer) + Number(cat.corporateCredit)
+      toNum(cat.corporateCash) + toNum(cat.corporateTransfer) + toNum(cat.corporateCredit)
     const categoryTotal = consumerTotal + corporateTotal
 
     if (cat.category === "RETAIL_RELOAD") {
@@ -131,7 +132,7 @@ export async function calculateWallet(
   const wholesaleWalletCost = await getWholesaleReloadTotal({ dailyEntryId: entryId })
   reloadSalesUsed.total += wholesaleWalletCost
 
-  const closingActual = entry.wallet ? Number(entry.wallet.closingActual) : 0
+  const closingActual = entry.wallet ? toNum(entry.wallet.closingActual) : 0
   const closingExpected = opening.balance + topups.total - reloadSalesUsed.total
   const variance = closingActual - closingExpected
 
@@ -155,7 +156,7 @@ export async function getPreviousDayClosing(date: Date): Promise<number | null> 
   })
 
   if (entry?.wallet) {
-    return Number(entry.wallet.closingActual)
+    return toNum(entry.wallet.closingActual)
   }
 
   return null

@@ -6,6 +6,7 @@ import { CustomerType } from "@prisma/client"
 import { createCreditCustomerSchema, validateRequestBody } from "@/lib/validations"
 import { calculateCreditBalance } from "@/lib/utils/balance"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { logError } from "@/lib/logger"
 
 // GET /api/credit-customers - List all credit customers
 export async function GET(request: NextRequest) {
@@ -93,7 +94,7 @@ export async function GET(request: NextRequest) {
       pagination: { total, limit, offset },
     })
   } catch (error) {
-    console.error("Error fetching credit customers:", error)
+    logError("Error fetching credit customers", error)
     return NextResponse.json(
       { success: false, error: "Failed to fetch credit customers" },
       { status: 500 }
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error("Error creating credit customer:", error)
+    logError("Error creating credit customer", error)
     return NextResponse.json(
       { success: false, error: "Failed to create credit customer" },
       { status: 500 }

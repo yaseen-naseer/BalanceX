@@ -10,9 +10,20 @@ export const dateStringSchema = z.string().refine(
     return !isNaN(date.getTime())
   },
   { message: "Invalid date format" }
+).refine(
+  (val) => {
+    // Compare date strings directly to avoid timezone issues
+    const now = new Date()
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    return val <= todayStr
+  },
+  { message: "Date cannot be in the future" }
 )
 
-export const positiveNumberSchema = z.number().positive("Must be a positive number")
+export const positiveNumberSchema = z.number()
+  .positive("Must be a positive number")
+  .min(0.01, "Minimum amount is 0.01 MVR")
+  .refine((v) => Math.round(v * 100) === v * 100, { message: "Maximum 2 decimal places" })
 export const nonNegativeNumberSchema = z.number().min(0, "Cannot be negative")
 
 export const customerTypeSchema = z.enum(["CONSUMER", "CORPORATE"])
@@ -60,7 +71,6 @@ export const createDailyEntrySchema = z.object({
 })
 
 export const updateDailyEntrySchema = z.object({
-  date: dateStringSchema.optional(),
   categories: z.array(categoryInputSchema).optional(),
   cashDrawer: cashDrawerInputSchema.optional(),
   wallet: walletInputSchema.optional(),
@@ -310,6 +320,13 @@ export const createSaleLineItemSchema = z.object({
   wholesaleCustomerId: z.string().cuid().optional().nullable(),
   cashAmount: positiveNumberSchema.optional().nullable(),
   discountPercent: z.number().min(6).max(8).optional().nullable(),
+})
+
+export const updateSaleLineItemSchema = z.object({
+  amount: positiveNumberSchema.optional(),
+  serviceNumber: z.string().max(50).optional().nullable(),
+  note: z.string().max(500).optional().nullable(),
+  reason: z.string().max(500).optional().nullable(),
 })
 
 // ============================================

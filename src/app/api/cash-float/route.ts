@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { getAuthenticatedUser, requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
+import { logError } from "@/lib/logger"
 import {
   createCashFloatSchema,
   updateCashFloatSchema,
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Error fetching cash float:", error)
+    logError("Error fetching cash float", error)
     return NextResponse.json(
       { success: false, error: "Failed to fetch cash float" },
       { status: 500 }
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error("Error creating cash float:", error)
+    logError("Error creating cash float", error)
     return NextResponse.json(
       { success: false, error: "Failed to create cash float" },
       { status: 500 }
@@ -273,7 +274,7 @@ export async function PATCH(request: NextRequest) {
       data: convertPrismaDecimals(updatedFloat),
     })
   } catch (error) {
-    console.error("Error updating cash float:", error)
+    logError("Error updating cash float", error)
     return NextResponse.json(
       { success: false, error: "Failed to update cash float" },
       { status: 500 }
@@ -303,7 +304,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deleting cash float:", error)
+    logError("Error deleting cash float", error)
     return NextResponse.json(
       { success: false, error: "Failed to delete cash float" },
       { status: 500 }

@@ -3,51 +3,12 @@ import { prisma } from "@/lib/db"
 import { getAuthenticatedUser } from "@/lib/api-auth"
 import { canEditDailyEntry } from "@/lib/permissions"
 import { successResponse, ApiErrors } from "@/lib/api-response"
+import { updateSaleLineItemSchema, validateRequestBody } from "@/lib/validations"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
-import type { CategoryType, CustomerType, PaymentMethod } from "@prisma/client"
-
-function getCategoryFieldName(customerType: CustomerType, paymentMethod: PaymentMethod): string {
-  const ct = customerType === "CONSUMER" ? "consumer" : "corporate"
-  const pm = paymentMethod.charAt(0) + paymentMethod.slice(1).toLowerCase()
-  return `${ct}${pm}`
-}
-
-async function syncCellTotal(
-  dailyEntryId: string,
-  category: CategoryType,
-  customerType: CustomerType,
-  paymentMethod: PaymentMethod
-): Promise<number> {
-  // For wholesale reload: grid shows cash received (cashAmount), not reload amount
-  let total: number
-  if (category === "WHOLESALE_RELOAD") {
-    const items = await prisma.saleLineItem.findMany({
-      where: { dailyEntryId, category, customerType, paymentMethod },
-      select: { amount: true, cashAmount: true },
-    })
-    total = items.reduce((sum, item) => sum + Number(item.cashAmount ?? item.amount), 0)
-  } else {
-    const agg = await prisma.saleLineItem.aggregate({
-      where: { dailyEntryId, category, customerType, paymentMethod },
-      _sum: { amount: true },
-    })
-    total = Number(agg._sum.amount ?? 0)
-  }
-  const fieldName = getCategoryFieldName(customerType, paymentMethod)
-
-  const existing = await prisma.dailyEntryCategory.findUnique({
-    where: { dailyEntryId_category: { dailyEntryId, category } },
-  })
-
-  if (existing) {
-    await prisma.dailyEntryCategory.update({
-      where: { dailyEntryId_category: { dailyEntryId, category } },
-      data: { [fieldName]: total },
-    })
-  }
-
-  return total
-}
+import { withTransaction } from "@/lib/utils/atomic"
+import { getWalletDeduction, checkWalletSufficiency } from "@/lib/utils/wallet-check"
+import { syncCellTotal } from "@/lib/utils/sync-cell-total"
+import { logError } from "@/lib/logger"
 
 // PATCH /api/sale-line-items/[id] - Edit a sale line item
 export async function PATCH(
@@ -59,12 +20,11 @@ export async function PATCH(
 
   try {
     const { id } = await params
-    const body = await request.json()
-    const { amount, serviceNumber, note, reason } = body
 
-    if (amount !== undefined && (typeof amount !== "number" || amount <= 0)) {
-      return ApiErrors.badRequest("Amount must be a positive number")
-    }
+    // Validate request body with Zod schema (S6)
+    const validation = await validateRequestBody(request, updateSaleLineItemSchema)
+    if ("error" in validation) return validation.error
+    const { amount, serviceNumber, note, reason } = validation.data
 
     const lineItem = await prisma.saleLineItem.findUnique({
       where: { id },
@@ -87,34 +47,50 @@ export async function PATCH(
 
     const previousAmount = Number(lineItem.amount)
 
-    // Update the line item
-    const updated = await prisma.saleLineItem.update({
-      where: { id },
-      data: {
-        ...(amount !== undefined && { amount }),
-        ...(serviceNumber !== undefined && { serviceNumber: serviceNumber || null }),
-        ...(note !== undefined && { note: note || null }),
-      },
-    })
+    // Atomic: update + wallet check + syncCellTotal in a single serializable transaction
+    const { updated, cellTotal, cellCount } = await withTransaction(async (tx) => {
+      // B13: Re-check wallet sufficiency when amount increases for reload categories
+      if (amount !== undefined && amount > previousAmount) {
+        const delta = amount - previousAmount
+        const walletDelta = getWalletDeduction(lineItem.category, delta)
+        if (walletDelta > 0) {
+          const walletError = await checkWalletSufficiency(lineItem.category, walletDelta, tx)
+          if (walletError) {
+            throw { type: "WALLET_INSUFFICIENT", message: walletError }
+          }
+        }
+      }
 
-    // Sync cell total if amount changed
-    let cellTotal = previousAmount
-    if (amount !== undefined && amount !== previousAmount) {
-      cellTotal = await syncCellTotal(
-        lineItem.dailyEntryId,
-        lineItem.category,
-        lineItem.customerType,
-        lineItem.paymentMethod
-      )
-    }
+      const upd = await tx.saleLineItem.update({
+        where: { id },
+        data: {
+          ...(amount !== undefined && { amount }),
+          ...(serviceNumber !== undefined && { serviceNumber: serviceNumber || null }),
+          ...(note !== undefined && { note: note || null }),
+        },
+      })
 
-    const cellCount = await prisma.saleLineItem.count({
-      where: {
-        dailyEntryId: lineItem.dailyEntryId,
-        category: lineItem.category,
-        customerType: lineItem.customerType,
-        paymentMethod: lineItem.paymentMethod,
-      },
+      let total = previousAmount
+      if (amount !== undefined && amount !== previousAmount) {
+        total = await syncCellTotal(
+          lineItem.dailyEntryId,
+          lineItem.category,
+          lineItem.customerType,
+          lineItem.paymentMethod,
+          tx
+        )
+      }
+
+      const count = await tx.saleLineItem.count({
+        where: {
+          dailyEntryId: lineItem.dailyEntryId,
+          category: lineItem.category,
+          customerType: lineItem.customerType,
+          paymentMethod: lineItem.paymentMethod,
+        },
+      })
+
+      return { updated: upd, cellTotal: total, cellCount: count }
     })
 
     await createAuditLog({
@@ -152,8 +128,15 @@ export async function PATCH(
       cellTotal,
       cellCount,
     })
-  } catch (error) {
-    console.error("Error editing sale line item:", error)
+  } catch (error: unknown) {
+    // Handle structured wallet error from inside transaction (B13)
+    if (error && typeof error === "object" && "type" in error) {
+      const typed = error as { type: string; message?: string }
+      if (typed.type === "WALLET_INSUFFICIENT") {
+        return ApiErrors.badRequest(typed.message || "Insufficient wallet balance")
+      }
+    }
+    logError("Error editing sale line item", error)
     return ApiErrors.serverError("Failed to edit sale line item")
   }
 }
@@ -173,6 +156,7 @@ export async function DELETE(
       where: { id },
       include: {
         dailyEntry: { select: { id: true, status: true, date: true, createdBy: true } },
+        creditSale: { select: { id: true, creditTransactionId: true, customerId: true } },
       },
     })
 
@@ -198,24 +182,44 @@ export async function DELETE(
       // no body is fine
     }
 
-    // Delete the line item
-    await prisma.saleLineItem.delete({ where: { id } })
+    // Atomic: delete line item (+ linked credit sale if wholesale) + syncCellTotal
+    const { cellTotal, cellCount } = await withTransaction(async (tx) => {
+      // If this line item is linked to a credit sale, cascade-delete it
+      if (lineItem.creditSale) {
+        const { id: creditSaleId, creditTransactionId } = lineItem.creditSale
 
-    // Sync cell total
-    const cellTotal = await syncCellTotal(
-      lineItem.dailyEntryId,
-      lineItem.category,
-      lineItem.customerType,
-      lineItem.paymentMethod
-    )
+        // Delete the line item first (has FK to credit sale with onDelete: SetNull)
+        await tx.saleLineItem.delete({ where: { id } })
 
-    const cellCount = await prisma.saleLineItem.count({
-      where: {
-        dailyEntryId: lineItem.dailyEntryId,
-        category: lineItem.category,
-        customerType: lineItem.customerType,
-        paymentMethod: lineItem.paymentMethod,
-      },
+        // Delete the credit sale
+        await tx.creditSale.delete({ where: { id: creditSaleId } })
+
+        // Delete the linked credit transaction
+        if (creditTransactionId) {
+          await tx.creditTransaction.delete({ where: { id: creditTransactionId } })
+        }
+      } else {
+        await tx.saleLineItem.delete({ where: { id } })
+      }
+
+      const total = await syncCellTotal(
+        lineItem.dailyEntryId,
+        lineItem.category,
+        lineItem.customerType,
+        lineItem.paymentMethod,
+        tx
+      )
+
+      const count = await tx.saleLineItem.count({
+        where: {
+          dailyEntryId: lineItem.dailyEntryId,
+          category: lineItem.category,
+          customerType: lineItem.customerType,
+          paymentMethod: lineItem.paymentMethod,
+        },
+      })
+
+      return { cellTotal: total, cellCount: count }
     })
 
     await createAuditLog({
@@ -230,6 +234,7 @@ export async function DELETE(
         amount: Number(lineItem.amount),
         cellTotal,
         reason: reason ?? "No reason provided",
+        ...(lineItem.creditSale && { cascadeDeletedCreditSaleId: lineItem.creditSale.id }),
       },
       ipAddress: getClientIpFromRequest(request),
       userAgent: getUserAgentFromRequest(request),
@@ -237,7 +242,7 @@ export async function DELETE(
 
     return successResponse({ cellTotal, cellCount })
   } catch (error) {
-    console.error("Error deleting sale line item:", error)
+    logError("Error deleting sale line item", error)
     return ApiErrors.serverError("Failed to delete sale line item")
   }
 }

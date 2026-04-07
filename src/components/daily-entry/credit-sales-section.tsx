@@ -1,17 +1,34 @@
 "use client"
 
 import { useState } from "react"
+import { useApiClient } from "@/hooks/use-api-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Users, Trash2, ChevronDown, ChevronUp } from "lucide-react"
 import { toast } from "sonner"
 import { CreditSaleDialog } from "@/components/credit/credit-sale-dialog"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { CURRENCY_CODE } from "@/lib/constants"
 import type { DailyEntryWithRelations } from "@/types"
+
+const DELETE_REASONS = [
+  "Wrong amount entered",
+  "Duplicate entry",
+  "Wrong category selected",
+  "Wrong customer type",
+  "Sale was cancelled/reversed",
+] as const
 
 export interface CreditSalesSectionProps {
   entry: DailyEntryWithRelations | null
@@ -35,6 +52,7 @@ export function CreditSalesSection({
   onRefreshEntry,
   onSaveDraft,
 }: CreditSalesSectionProps) {
+  const api = useApiClient()
   const [expanded, setExpanded] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<{
     id: string
@@ -42,29 +60,31 @@ export function CreditSalesSection({
     amount: number
   } | null>(null)
   const [deleteReason, setDeleteReason] = useState("")
+  const [deleteCustomReason, setDeleteCustomReason] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
+
+  const finalDeleteReason = deleteReason === "Other" ? deleteCustomReason.trim() : deleteReason
 
   const handleDeleteCreditSale = async () => {
     if (!pendingDelete) return
-    if (!deleteReason.trim()) {
+    if (!finalDeleteReason) {
       toast.error("Please provide a reason for removing this credit sale")
       return
     }
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/credit-sales?id=${pendingDelete.id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: deleteReason.trim() }),
+      const result = await api.delete("/api/credit-sales", {
+        params: { id: pendingDelete.id },
+        body: { reason: finalDeleteReason },
       })
-      const data = await response.json()
-      if (data.success) {
+      if (result.success) {
         toast.success("Credit sale removed")
         setPendingDelete(null)
         setDeleteReason("")
+        setDeleteCustomReason("")
         onRefreshEntry()
       } else {
-        toast.error(data.error || "Failed to remove credit sale")
+        toast.error(result.error || "Failed to remove credit sale")
       }
     } catch {
       toast.error("Failed to remove credit sale")
@@ -104,6 +124,7 @@ export function CreditSalesSection({
             size="icon"
             className="h-8 w-8"
             onClick={() => setExpanded(!expanded)}
+            aria-label={expanded ? "Collapse credit sales" : "Expand credit sales"}
           >
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
@@ -138,7 +159,7 @@ export function CreditSalesSection({
                   {sale.cashAmount != null ? (
                     <div className="text-right">
                       <span className="font-mono font-semibold text-amber-600">
-                        {Number(sale.cashAmount).toLocaleString()} MVR
+                        {Number(sale.cashAmount).toLocaleString()} {CURRENCY_CODE}
                       </span>
                       <span className="block text-[10px] text-muted-foreground">
                         {Number(sale.amount).toLocaleString()} reload @ {Number(sale.discountPercent)}%
@@ -146,7 +167,7 @@ export function CreditSalesSection({
                     </div>
                   ) : (
                     <span className="font-mono font-semibold text-amber-600">
-                      {Number(sale.amount).toLocaleString()} MVR
+                      {Number(sale.amount).toLocaleString()} {CURRENCY_CODE}
                     </span>
                   )}
                   {!isReadOnly && (
@@ -159,6 +180,7 @@ export function CreditSalesSection({
                         customerName: sale.customer.name,
                         amount: Number(sale.amount),
                       })}
+                      aria-label={`Delete credit sale for ${sale.customer.name}`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -172,7 +194,7 @@ export function CreditSalesSection({
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <span>Consumer:</span>
                   <span className="font-mono font-semibold text-foreground">
-                    {linkedConsumerCreditTotal.toLocaleString()} MVR
+                    {linkedConsumerCreditTotal.toLocaleString()} {CURRENCY_CODE}
                   </span>
                 </div>
               )}
@@ -180,7 +202,7 @@ export function CreditSalesSection({
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <span>Corporate:</span>
                   <span className="font-mono font-semibold text-foreground">
-                    {linkedCorporateCreditTotal.toLocaleString()} MVR
+                    {linkedCorporateCreditTotal.toLocaleString()} {CURRENCY_CODE}
                   </span>
                 </div>
               )}
@@ -199,11 +221,11 @@ export function CreditSalesSection({
 
       <ConfirmDialog
         open={!!pendingDelete}
-        onOpenChange={(open) => { if (!open) { setPendingDelete(null); setDeleteReason("") } }}
+        onOpenChange={(open) => { if (!open) { setPendingDelete(null); setDeleteReason(""); setDeleteCustomReason("") } }}
         title="Remove Credit Sale?"
         description={
           pendingDelete
-            ? `Remove the ${pendingDelete.amount.toLocaleString()} MVR credit sale for ${pendingDelete.customerName}? This will reduce their outstanding balance.`
+            ? `Remove the ${pendingDelete.amount.toLocaleString()} ${CURRENCY_CODE} credit sale for ${pendingDelete.customerName}? This will reduce their outstanding balance.`
             : ''
         }
         confirmLabel="Remove"
@@ -211,17 +233,35 @@ export function CreditSalesSection({
         onConfirm={handleDeleteCreditSale}
         isLoading={isDeleting}
         loadingText="Removing..."
-        disableConfirm={!deleteReason.trim()}
+        disableConfirm={!finalDeleteReason}
       >
-        <div className="space-y-2">
-          <Label htmlFor="delete-reason">Reason for removal *</Label>
-          <Textarea
-            id="delete-reason"
-            placeholder="e.g. Entered wrong amount, duplicate entry..."
+        <div className="space-y-3">
+          <Label>Reason for removal *</Label>
+          <Select
             value={deleteReason}
-            onChange={(e) => setDeleteReason(e.target.value)}
-            rows={3}
-          />
+            onValueChange={(v) => {
+              setDeleteReason(v)
+              if (v !== "Other") setDeleteCustomReason("")
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a reason..." />
+            </SelectTrigger>
+            <SelectContent>
+              {DELETE_REASONS.map((reason) => (
+                <SelectItem key={reason} value={reason}>{reason}</SelectItem>
+              ))}
+              <SelectItem value="Other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+          {deleteReason === "Other" && (
+            <Input
+              placeholder="Enter reason..."
+              value={deleteCustomReason}
+              onChange={(e) => setDeleteCustomReason(e.target.value)}
+              autoFocus
+            />
+          )}
         </div>
       </ConfirmDialog>
     </Card>

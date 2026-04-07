@@ -23,6 +23,7 @@ export async function getAuthenticatedUser(): Promise<AuthResult> {
   const session = await getServerSession(authOptions)
 
   if (!session?.user) {
+    console.warn(`[AUTH] Unauthorized access attempt at ${new Date().toISOString()}`)
     return {
       authenticated: false,
       user: null,
@@ -48,6 +49,7 @@ export async function requirePermission(permission: Permission): Promise<AuthRes
   }
 
   if (!hasPermission(authResult.user.role, permission)) {
+    console.warn(`[AUTH] Permission denied: user=${authResult.user.username} role=${authResult.user.role} permission=${permission} at ${new Date().toISOString()}`)
     return {
       authenticated: true,
       user: authResult.user,

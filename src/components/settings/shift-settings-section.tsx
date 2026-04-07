@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useApiClient } from "@/hooks/use-api-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,6 +33,7 @@ interface ShiftSettingsSectionProps {
 }
 
 export function ShiftSettingsSection({ isOwner }: ShiftSettingsSectionProps) {
+  const api = useApiClient()
   const [shifts, setShifts] = useState<ShiftSetting[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showDialog, setShowDialog] = useState(false)
@@ -50,11 +52,8 @@ export function ShiftSettingsSection({ isOwner }: ShiftSettingsSectionProps) {
 
   const fetchShifts = async () => {
     try {
-      const res = await fetch("/api/shift-settings")
-      if (res.ok) {
-        const data = await res.json()
-        setShifts(data.data || [])
-      }
+      const result = await api.get<ShiftSetting[]>("/api/shift-settings")
+      setShifts(result.data || [])
     } catch (error) {
       console.error("Error fetching shift settings:", error)
       toast.error("Failed to load shift settings")
@@ -88,8 +87,6 @@ export function ShiftSettingsSection({ isOwner }: ShiftSettingsSectionProps) {
 
     setIsSubmitting(true)
     try {
-      const url = "/api/shift-settings"
-      const method = editingShift ? "PATCH" : "POST"
       const body = editingShift
         ? {
             id: editingShift.id,
@@ -105,19 +102,16 @@ export function ShiftSettingsSection({ isOwner }: ShiftSettingsSectionProps) {
             isDefault: formData.isDefault,
           }
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
+      const result = editingShift
+        ? await api.patch("/api/shift-settings", body)
+        : await api.post("/api/shift-settings", body)
 
-      if (res.ok) {
+      if (result.success) {
         toast.success(editingShift ? "Shift updated" : "Shift created")
         setShowDialog(false)
         fetchShifts()
       } else {
-        const error = await res.json()
-        toast.error(error.error || "Failed to save shift")
+        toast.error(result.error || "Failed to save shift")
       }
     } catch (error) {
       console.error("Error saving shift:", error)
@@ -131,11 +125,8 @@ export function ShiftSettingsSection({ isOwner }: ShiftSettingsSectionProps) {
     if (!confirm("Are you sure you want to delete this shift?")) return
 
     try {
-      const res = await fetch(`/api/shift-settings?id=${id}`, {
-        method: "DELETE",
-      })
-
-      if (res.ok) {
+      const result = await api.delete("/api/shift-settings", { params: { id } })
+      if (result.success) {
         toast.success("Shift deleted")
         fetchShifts()
       } else {
@@ -149,13 +140,8 @@ export function ShiftSettingsSection({ isOwner }: ShiftSettingsSectionProps) {
 
   const handleSetDefault = async (id: string) => {
     try {
-      const res = await fetch("/api/shift-settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, isDefault: true }),
-      })
-
-      if (res.ok) {
+      const result = await api.patch("/api/shift-settings", { id, isDefault: true })
+      if (result.success) {
         toast.success("Default shift updated")
         fetchShifts()
       } else {
@@ -179,15 +165,10 @@ export function ShiftSettingsSection({ isOwner }: ShiftSettingsSectionProps) {
     newShifts[index] = newShifts[newIndex]
     newShifts[newIndex] = temp
 
-    // Update sort orders
     try {
       await Promise.all(
         newShifts.map((shift, idx) =>
-          fetch("/api/shift-settings", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: shift.id, sortOrder: idx }),
-          })
+          api.patch("/api/shift-settings", { id: shift.id, sortOrder: idx })
         )
       )
       fetchShifts()

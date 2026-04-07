@@ -1,31 +1,72 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { requirePermission } from "@/lib/api-auth"
+import { PERMISSIONS } from "@/lib/permissions"
+import { logError } from "@/lib/logger"
 import prisma from "@/lib/db"
+import type {
+  DailyEntry,
+  DailyEntryCashDrawer,
+  DailyEntryWallet,
+  DailyEntryCategory,
+  DailyEntryNotes,
+  CreditSale,
+  CreditCustomer,
+  CreditTransaction,
+  BankTransaction,
+  BankSettings,
+  WalletTopup,
+  WalletSettings,
+} from "@prisma/client"
+
+interface ExportDailyEntry extends DailyEntry {
+  cashDrawer: DailyEntryCashDrawer | null
+  wallet: DailyEntryWallet | null
+  categories: DailyEntryCategory[]
+  notes: DailyEntryNotes | null
+  creditSales: (CreditSale & { customer: CreditCustomer })[]
+}
+
+interface ExportData {
+  dailyEntries?: ExportDailyEntry[]
+  creditCustomers?: CreditCustomer[]
+  creditTransactions?: (CreditTransaction & { customer: CreditCustomer })[]
+  bankTransactions?: BankTransaction[]
+  bankSettings?: BankSettings | null
+  walletTopups?: WalletTopup[]
+  walletSettings?: WalletSettings | null
+  warning?: string
+  exportedAt?: string
+  exportedBy?: string
+}
 
 // GET - Export all data (Owner/Accountant only)
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    if (session.user.role === "SALES") {
-      return NextResponse.json(
-        { error: "Sales role cannot export data" },
-        { status: 403 }
-      )
-    }
+    const auth = await requirePermission(PERMISSIONS.REPORTS_EXPORT)
+    if (auth.error) return auth.error
 
     const { searchParams } = new URL(request.url)
     const format = searchParams.get("format") || "json"
     const type = searchParams.get("type") || "all"
 
-    const data: Record<string, unknown> = {}
+    // D7: Parse optional date range filters and enforce row limits
+    const EXPORT_LIMIT = 50000
+    const fromDate = searchParams.get("from") ? new Date(searchParams.get("from")!) : undefined
+    const toDate = searchParams.get("to") ? new Date(searchParams.get("to")!) : undefined
+    const dateFilter = {
+      ...(fromDate && { gte: fromDate }),
+      ...(toDate && { lte: toDate }),
+    }
+    const hasDateFilter = fromDate || toDate
+
+    const data: ExportData = {}
+    let limitHit = false
+    const isOwner = auth.user!.role === "OWNER"
 
     if (type === "all" || type === "daily-entries") {
-      data.dailyEntries = await prisma.dailyEntry.findMany({
+      const entries = await prisma.dailyEntry.findMany({
+        take: EXPORT_LIMIT,
+        ...(hasDateFilter && { where: { date: dateFilter } }),
         include: {
           cashDrawer: true,
           wallet: true,
@@ -39,66 +80,85 @@ export async function GET(request: NextRequest) {
         },
         orderBy: { date: "desc" },
       })
+      data.dailyEntries = entries
+      if (entries.length >= EXPORT_LIMIT) limitHit = true
     }
 
     if (type === "all" || type === "credit-customers") {
-      data.creditCustomers = await prisma.creditCustomer.findMany({
+      const customers = await prisma.creditCustomer.findMany({
+        take: EXPORT_LIMIT,
         orderBy: { name: "asc" },
       })
+      data.creditCustomers = customers
+      if (customers.length >= EXPORT_LIMIT) limitHit = true
     }
 
     if (type === "all" || type === "credit-transactions") {
-      data.creditTransactions = await prisma.creditTransaction.findMany({
+      const transactions = await prisma.creditTransaction.findMany({
+        take: EXPORT_LIMIT,
+        ...(hasDateFilter && { where: { date: dateFilter } }),
         include: {
           customer: true,
         },
         orderBy: { date: "desc" },
       })
+      data.creditTransactions = transactions
+      if (transactions.length >= EXPORT_LIMIT) limitHit = true
     }
 
-    if (type === "all" || type === "bank-transactions") {
-      data.bankTransactions = await prisma.bankTransaction.findMany({
+    // S9: Bank and wallet data restricted to OWNER
+    if ((type === "all" || type === "bank-transactions") && isOwner) {
+      const bankTx = await prisma.bankTransaction.findMany({
+        take: EXPORT_LIMIT,
+        ...(hasDateFilter && { where: { date: dateFilter } }),
         orderBy: { date: "desc" },
       })
+      data.bankTransactions = bankTx
       data.bankSettings = await prisma.bankSettings.findFirst()
+      if (bankTx.length >= EXPORT_LIMIT) limitHit = true
     }
 
-    if (type === "all" || type === "wallet") {
-      data.walletTopups = await prisma.walletTopup.findMany({
+    if ((type === "all" || type === "wallet") && isOwner) {
+      const topups = await prisma.walletTopup.findMany({
+        take: EXPORT_LIMIT,
+        ...(hasDateFilter && { where: { date: dateFilter } }),
         orderBy: { date: "desc" },
       })
+      data.walletTopups = topups
       data.walletSettings = await prisma.walletSettings.findFirst()
+      if (topups.length >= EXPORT_LIMIT) limitHit = true
+    }
+
+    if (limitHit) {
+      data.warning = `Export limited to ${EXPORT_LIMIT.toLocaleString()} records per type. Use date filters (?from=YYYY-MM-DD&to=YYYY-MM-DD) for complete data.`
     }
 
     data.exportedAt = new Date().toISOString()
-    data.exportedBy = session.user.name
+    data.exportedBy = auth.user!.name
 
     if (format === "csv") {
       // For CSV, we'll just return daily entries summary
-      const entries = data.dailyEntries as Array<Record<string, unknown>>
+      const entries = data.dailyEntries
       if (!entries || entries.length === 0) {
         return new NextResponse("No data to export", { status: 200 })
       }
 
       const headers = ["Date", "Status", "Total Cash", "Total Transfer", "Total Credit", "Cash Variance", "Wallet Variance"]
-      const rows = entries.map((e: Record<string, unknown>) => {
-        const categories = e.categories as Array<Record<string, number>> || []
+      const rows = entries.map((e) => {
         let totalCash = 0, totalTransfer = 0, totalCredit = 0
-        categories.forEach((c) => {
-          totalCash += (c.consumerCash || 0) + (c.corporateCash || 0)
-          totalTransfer += (c.consumerTransfer || 0) + (c.corporateTransfer || 0)
-          totalCredit += (c.consumerCredit || 0) + (c.corporateCredit || 0)
+        e.categories.forEach((c) => {
+          totalCash += Number(c.consumerCash) + Number(c.corporateCash)
+          totalTransfer += Number(c.consumerTransfer) + Number(c.corporateTransfer)
+          totalCredit += Number(c.consumerCredit) + Number(c.corporateCredit)
         })
-        const cashDrawer = e.cashDrawer as Record<string, number> | null
-        const wallet = e.wallet as Record<string, number> | null
         return [
-          new Date(e.date as string).toISOString().split("T")[0],
+          e.date.toISOString().split("T")[0],
           e.status,
           totalCash,
           totalTransfer,
           totalCredit,
-          cashDrawer?.variance || 0,
-          wallet?.variance || 0,
+          e.cashDrawer ? Number(e.cashDrawer.variance) : 0,
+          e.wallet ? Number(e.wallet.variance) : 0,
         ].join(",")
       })
 
@@ -115,7 +175,7 @@ export async function GET(request: NextRequest) {
     // Return JSON
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error exporting data:", error)
+    logError("Error exporting data", error)
     return NextResponse.json(
       { error: "Failed to export data" },
       { status: 500 }

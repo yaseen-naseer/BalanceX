@@ -1,6 +1,10 @@
 import { prisma } from '@/lib/db'
 import type { CategoryType } from '@prisma/client'
+import DecimalLight from 'decimal.js-light'
 import { stripRetailGst } from '@/lib/utils/balance'
+import { toNum } from '@/lib/utils/decimal'
+import { withTransaction } from '@/lib/utils/atomic'
+import type { TxClient } from '@/lib/utils/atomic'
 
 /**
  * Calculate total cash sales from categories
@@ -9,7 +13,7 @@ export function calculateTotalCashSales(
   categories: Array<{ consumerCash: unknown; corporateCash: unknown }>
 ): number {
   return categories.reduce(
-    (sum, cat) => sum + Number(cat.consumerCash) + Number(cat.corporateCash),
+    (sum, cat) => sum + toNum(cat.consumerCash) + toNum(cat.corporateCash),
     0
   )
 }
@@ -35,12 +39,12 @@ export function calculateReloadSales(
   for (const cat of categories) {
     if (cat.category === 'RETAIL_RELOAD') {
       const catTotal =
-        Number(cat.consumerCash) +
-        Number(cat.consumerTransfer) +
-        Number(cat.consumerCredit) +
-        Number(cat.corporateCash) +
-        Number(cat.corporateTransfer) +
-        Number(cat.corporateCredit)
+        toNum(cat.consumerCash) +
+        toNum(cat.consumerTransfer) +
+        toNum(cat.consumerCredit) +
+        toNum(cat.corporateCash) +
+        toNum(cat.corporateTransfer) +
+        toNum(cat.corporateCredit)
       total += stripRetailGst(catTotal)
     }
     // Wholesale: category grid stores cash received, not wallet cost
@@ -49,14 +53,14 @@ export function calculateReloadSales(
   if (wholesaleReloadFromLineItems != null) {
     total += wholesaleReloadFromLineItems
   }
-  return Math.round(total * 100) / 100
+  return new DecimalLight(total).toDecimalPlaces(2).toNumber()
 }
 
 /**
  * Get cash settlements for a date
  */
-export async function getCashSettlements(date: Date): Promise<number> {
-  const result = await prisma.creditTransaction.aggregate({
+export async function getCashSettlements(date: Date, db: TxClient | typeof prisma = prisma): Promise<number> {
+  const result = await db.creditTransaction.aggregate({
     _sum: { amount: true },
     where: {
       date,
@@ -64,32 +68,32 @@ export async function getCashSettlements(date: Date): Promise<number> {
       paymentMethod: 'CASH',
     },
   })
-  return Number(result._sum.amount || 0)
+  return toNum(result._sum.amount)
 }
 
 /**
  * Get wallet topups from cash for a date
  */
-export async function getWalletTopupsFromCash(date: Date): Promise<number> {
-  const result = await prisma.walletTopup.aggregate({
+export async function getWalletTopupsFromCash(date: Date, db: TxClient | typeof prisma = prisma): Promise<number> {
+  const result = await db.walletTopup.aggregate({
     _sum: { amount: true },
     where: {
       date,
       source: 'CASH',
     },
   })
-  return Number(result._sum.amount || 0)
+  return toNum(result._sum.amount)
 }
 
 /**
  * Get total wallet topups for a date
  */
-export async function getTotalWalletTopups(date: Date): Promise<number> {
-  const result = await prisma.walletTopup.aggregate({
+export async function getTotalWalletTopups(date: Date, db: TxClient | typeof prisma = prisma): Promise<number> {
+  const result = await db.walletTopup.aggregate({
     _sum: { amount: true },
     where: { date },
   })
-  return Number(result._sum.amount || 0)
+  return toNum(result._sum.amount)
 }
 
 /**
@@ -136,88 +140,92 @@ export function calculateWalletVariance(
  * Recalculate expected values and variances for an entry
  */
 export async function recalculateEntryValues(entryId: string): Promise<void> {
-  const entry = await prisma.dailyEntry.findUnique({
-    where: { id: entryId },
-    include: { cashDrawer: true, wallet: true, categories: true },
-  })
-
-  if (!entry) return
-
-  const entryDate = entry.date
-
-  // Get external data
-  const [cashSettlements, walletTopupsFromCash, totalWalletTopups] = await Promise.all([
-    getCashSettlements(entryDate),
-    getWalletTopupsFromCash(entryDate),
-    getTotalWalletTopups(entryDate),
-  ])
-
-  // Calculate totals
-  const totalCashSales = calculateTotalCashSales(entry.categories)
-  // Wholesale wallet cost from line items (category grid stores cash received)
-  const wholesaleLineItemAgg = await prisma.saleLineItem.aggregate({
-    where: { dailyEntryId: entryId, category: 'WHOLESALE_RELOAD' },
-    _sum: { amount: true },
-  })
-  const wholesaleReload = Number(wholesaleLineItemAgg._sum.amount ?? 0)
-  const totalReloadSales = calculateReloadSales(entry.categories, wholesaleReload)
-
-  // Update cash drawer
-  if (entry.cashDrawer) {
-    const { expected, variance } = calculateCashDrawerVariance(
-      Number(entry.cashDrawer.opening),
-      totalCashSales,
-      cashSettlements,
-      Number(entry.cashDrawer.bankDeposits),
-      walletTopupsFromCash,
-      Number(entry.cashDrawer.closingActual)
-    )
-
-    await prisma.dailyEntryCashDrawer.update({
-      where: { dailyEntryId: entryId },
-      data: {
-        closingExpected: expected,
-        variance: variance,
-      },
+  // C1: Wrap entire recalculation in Serializable transaction to prevent
+  // race conditions when deriving wallet opening from previous day's closing.
+  await withTransaction(async (tx) => {
+    const entry = await tx.dailyEntry.findUnique({
+      where: { id: entryId },
+      include: { cashDrawer: true, wallet: true, categories: true },
     })
-  }
 
-  // Update wallet
-  if (entry.wallet) {
-    let walletOpening = Number(entry.wallet.opening)
+    if (!entry) return
 
-    // When openingSource is PREVIOUS_DAY, always derive opening from the previous day's
-    // actual closing balance so the stored value stays accurate even if it was initially
-    // saved as 0 due to a race condition on first save.
-    if (entry.wallet.openingSource === 'PREVIOUS_DAY') {
-      const prevDate = new Date(entryDate)
-      prevDate.setDate(prevDate.getDate() - 1)
-      const prevEntry = await prisma.dailyEntry.findUnique({
-        where: { date: prevDate },
-        include: { wallet: true },
+    const entryDate = entry.date
+
+    // Get external data (pass tx for transactional reads)
+    const [cashSettlements, walletTopupsFromCash, totalWalletTopups] = await Promise.all([
+      getCashSettlements(entryDate, tx),
+      getWalletTopupsFromCash(entryDate, tx),
+      getTotalWalletTopups(entryDate, tx),
+    ])
+
+    // Calculate totals
+    const totalCashSales = calculateTotalCashSales(entry.categories)
+    // Wholesale wallet cost from line items (category grid stores cash received)
+    const wholesaleLineItemAgg = await tx.saleLineItem.aggregate({
+      where: { dailyEntryId: entryId, category: 'WHOLESALE_RELOAD' },
+      _sum: { amount: true },
+    })
+    const wholesaleReload = toNum(wholesaleLineItemAgg._sum.amount)
+    const totalReloadSales = calculateReloadSales(entry.categories, wholesaleReload)
+
+    // Update cash drawer
+    if (entry.cashDrawer) {
+      const { expected, variance } = calculateCashDrawerVariance(
+        toNum(entry.cashDrawer.opening),
+        totalCashSales,
+        cashSettlements,
+        toNum(entry.cashDrawer.bankDeposits),
+        walletTopupsFromCash,
+        toNum(entry.cashDrawer.closingActual)
+      )
+
+      await tx.dailyEntryCashDrawer.update({
+        where: { dailyEntryId: entryId },
+        data: {
+          closingExpected: expected,
+          variance: variance,
+        },
       })
-      if (prevEntry?.wallet) {
-        walletOpening = Number(prevEntry.wallet.closingActual)
-      }
     }
 
-    const walletClosingActual = Number(entry.wallet.closingActual)
-    const { expected: walletExpected, variance: walletVariance } = calculateWalletVariance(
-      walletOpening,
-      totalWalletTopups,
-      totalReloadSales,
-      walletClosingActual
-    )
+    // Update wallet
+    if (entry.wallet) {
+      let walletOpening = toNum(entry.wallet.opening)
 
-    await prisma.dailyEntryWallet.update({
-      where: { dailyEntryId: entryId },
-      data: {
-        opening: walletOpening,
-        closingExpected: walletExpected,
-        variance: walletVariance,
-      },
-    })
-  }
+      // When openingSource is PREVIOUS_DAY, always derive opening from the previous day's
+      // actual closing balance so the stored value stays accurate even if it was initially
+      // saved as 0 due to a race condition on first save.
+      if (entry.wallet.openingSource === 'PREVIOUS_DAY') {
+        const prevDate = new Date(entryDate)
+        prevDate.setDate(prevDate.getDate() - 1)
+        const prevEntry = await tx.dailyEntry.findUnique({
+          where: { date: prevDate },
+          include: { wallet: true },
+        })
+        if (prevEntry?.wallet) {
+          walletOpening = toNum(prevEntry.wallet.closingActual)
+        }
+      }
+
+      const walletClosingActual = toNum(entry.wallet.closingActual)
+      const { expected: walletExpected, variance: walletVariance } = calculateWalletVariance(
+        walletOpening,
+        totalWalletTopups,
+        totalReloadSales,
+        walletClosingActual
+      )
+
+      await tx.dailyEntryWallet.update({
+        where: { dailyEntryId: entryId },
+        data: {
+          opening: walletOpening,
+          closingExpected: walletExpected,
+          variance: walletVariance,
+        },
+      })
+    }
+  })
 }
 
 /**
@@ -232,9 +240,9 @@ export async function upsertCashDrawer(
     await prisma.dailyEntryCashDrawer.update({
       where: { dailyEntryId: entryId },
       data: {
-        opening: data.opening ?? Number(existing.opening),
-        bankDeposits: data.bankDeposits ?? Number(existing.bankDeposits),
-        closingActual: data.closingActual ?? Number(existing.closingActual),
+        opening: data.opening ?? toNum(existing.opening),
+        bankDeposits: data.bankDeposits ?? toNum(existing.bankDeposits),
+        closingActual: data.closingActual ?? toNum(existing.closingActual),
       },
     })
   } else {
@@ -261,9 +269,9 @@ export async function upsertWallet(
     await prisma.dailyEntryWallet.update({
       where: { dailyEntryId: entryId },
       data: {
-        opening: data.opening ?? Number(existing.opening),
+        opening: data.opening ?? toNum(existing.opening),
         openingSource: (data.openingSource ?? existing.openingSource) as 'PREVIOUS_DAY' | 'INITIAL_SETUP',
-        closingActual: data.closingActual ?? Number(existing.closingActual),
+        closingActual: data.closingActual ?? toNum(existing.closingActual),
       },
     })
   } else {

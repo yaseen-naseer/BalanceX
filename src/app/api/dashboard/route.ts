@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getAuthenticatedUser } from '@/lib/api-auth'
 import { successResponse, ApiErrors } from '@/lib/api-response'
+import { logError } from '@/lib/logger'
 import {
   calculateCategoryRevenue,
   calculateTodayBreakdown,
@@ -134,7 +135,7 @@ export async function GET(_request: NextRequest) {
       limitedView: false,
     })
   } catch (error) {
-    console.error('Error fetching dashboard data:', error)
+    logError('Error fetching dashboard data', error)
     return ApiErrors.serverError('Failed to fetch dashboard data')
   }
 }

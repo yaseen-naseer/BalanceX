@@ -5,6 +5,7 @@ import { canReopenDailyEntry } from '@/lib/permissions'
 import { successResponse, ApiErrors } from '@/lib/api-response'
 import { fullEntryInclude } from '@/lib/calculations/daily-entry'
 import { convertPrismaDecimals } from '@/lib/utils/serialize'
+import { logError } from '@/lib/logger'
 
 interface RouteParams {
   params: Promise<{ date: string }>
@@ -46,6 +47,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return ApiErrors.badRequest('Entry is not submitted')
     }
 
+    // B9: Prevent reopening if there's already an open (unresubmitted) amendment
+    const openAmendment = await prisma.dailyEntryAmendment.findFirst({
+      where: { dailyEntryId: entry.id, resubmittedAt: null },
+    })
+    if (openAmendment) {
+      return ApiErrors.badRequest('Entry already has an open amendment that has not been resubmitted')
+    }
+
     // Capture snapshot before reopening
     const snapshotBefore = JSON.stringify(convertPrismaDecimals(entry))
 
@@ -85,7 +94,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return successResponse(convertPrismaDecimals(updatedEntry))
   } catch (error) {
-    console.error('Error reopening daily entry:', error)
+    logError('Error reopening daily entry', error)
     return ApiErrors.serverError('Failed to reopen daily entry')
   }
 }

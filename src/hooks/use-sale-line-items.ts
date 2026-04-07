@@ -48,22 +48,34 @@ export function useSaleLineItems(dailyEntryId: string | null): UseSaleLineItemsR
   const [lineItems, setLineItems] = useState<SaleLineItemData[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const fetchedRef = useRef<string | null>(null)
+  const seqRef = useRef(0)
+
+  // Abort/discard stale responses on unmount
+  useEffect(() => {
+    return () => {
+      seqRef.current++
+    }
+  }, [])
 
   const fetchLineItems = useCallback(async () => {
     if (!dailyEntryId) {
       setLineItems([])
       return
     }
+    const seq = ++seqRef.current
     setIsLoading(true)
     try {
       const result = await api.get<SaleLineItemData[]>("/api/sale-line-items", {
         params: { dailyEntryId },
       })
+      if (seq !== seqRef.current) return // stale, discard
       if (result.success && result.data) {
         setLineItems(result.data)
       }
     } finally {
-      setIsLoading(false)
+      if (seq === seqRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [api, dailyEntryId])
 

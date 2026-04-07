@@ -1,4 +1,5 @@
 import type { CreditTransactionType, BankTransactionType, Prisma } from "@prisma/client"
+import DecimalLight from "decimal.js-light"
 
 type Decimal = Prisma.Decimal
 
@@ -99,7 +100,11 @@ export const RETAIL_RELOAD_GST_RATE = 0.08
  * Strip GST from a retail reload sale amount to get the wallet cost.
  */
 export function stripRetailGst(amount: number): number {
-  return Math.round((amount / (1 + RETAIL_RELOAD_GST_RATE)) * 100) / 100
+  // Use Decimal arithmetic to avoid floating-point rounding errors on financial values
+  return new DecimalLight(amount)
+    .div(new DecimalLight(1).plus(RETAIL_RELOAD_GST_RATE))
+    .toDecimalPlaces(2)
+    .toNumber()
 }
 
 /**
@@ -172,6 +177,6 @@ export function calculateReloadWalletCost(
       }
     }
   }
-  return Math.round(total * 100) / 100
+  return new DecimalLight(total).toDecimalPlaces(2).toNumber()
 }
 

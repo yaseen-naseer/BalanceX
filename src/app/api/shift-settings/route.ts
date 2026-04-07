@@ -8,14 +8,18 @@ import {
   validateRequestBody,
 } from "@/lib/validations"
 import { z } from "zod"
+import { logError } from "@/lib/logger"
 
 // Schema for PATCH (includes id)
 const patchShiftSettingsSchema = z.object({
   id: z.string().cuid("Invalid shift ID"),
 }).merge(updateShiftSettingsSchema)
 
-// GET /api/shift-settings - List all shifts
+// GET /api/shift-settings - List all shifts (authenticated)
 export async function GET() {
+  const auth = await requireRole([UserRole.OWNER, UserRole.ACCOUNTANT, UserRole.SALES])
+  if (auth.error) return auth.error
+
   try {
     const shifts = await prisma.shiftSettings.findMany({
       where: { isActive: true },
@@ -27,7 +31,7 @@ export async function GET() {
       data: shifts,
     })
   } catch (error) {
-    console.error("Error fetching shift settings:", error)
+    logError("Error fetching shift settings", error)
     return NextResponse.json(
       { success: false, error: "Failed to fetch shift settings" },
       { status: 500 }
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error("Error creating shift setting:", error)
+    logError("Error creating shift setting", error)
     return NextResponse.json(
       { success: false, error: "Failed to create shift setting" },
       { status: 500 }
@@ -121,7 +125,7 @@ export async function PATCH(request: NextRequest) {
       data: shift,
     })
   } catch (error) {
-    console.error("Error updating shift setting:", error)
+    logError("Error updating shift setting", error)
     return NextResponse.json(
       { success: false, error: "Failed to update shift setting" },
       { status: 500 }
@@ -152,7 +156,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deactivating shift setting:", error)
+    logError("Error deactivating shift setting", error)
     return NextResponse.json(
       { success: false, error: "Failed to deactivate shift setting" },
       { status: 500 }

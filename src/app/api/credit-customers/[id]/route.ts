@@ -8,6 +8,10 @@ import {
   validateRequestBody,
 } from "@/lib/validations"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { withTransaction } from "@/lib/utils/atomic"
+import { calculateCustomerOutstanding } from "@/lib/calculations/credit"
+import { CURRENCY_CODE } from "@/lib/constants"
+import { logError } from "@/lib/logger"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -67,7 +71,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     })
   } catch (error) {
-    console.error("Error fetching credit customer:", error)
+    logError("Error fetching credit customer", error)
     return NextResponse.json(
       { success: false, error: "Failed to fetch credit customer" },
       { status: 500 }
@@ -97,6 +101,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { success: false, error: "Customer not found" },
         { status: 404 }
       )
+    }
+
+    // B4: Check outstanding balance before deactivation (non-Owner blocked)
+    if (body.isActive === false && customer.isActive) {
+      const outstanding = await calculateCustomerOutstanding(id)
+      if (outstanding > 0 && auth.user!.role !== "OWNER") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Cannot deactivate: outstanding balance of ${outstanding.toLocaleString()} ${CURRENCY_CODE}. Owner approval required.`,
+            outstandingBalance: outstanding,
+          },
+          { status: 400 }
+        )
+      }
     }
 
     const updatedCustomer = await prisma.creditCustomer.update({
@@ -132,7 +151,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     })
   } catch (error) {
-    console.error("Error updating credit customer:", error)
+    logError("Error updating credit customer", error)
     return NextResponse.json(
       { success: false, error: "Failed to update credit customer" },
       { status: 500 }
@@ -177,38 +196,65 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Calculate current outstanding
-    const currentOutstanding = await calculateOutstanding(id)
+    // Atomic: calculate outstanding + validate + create settlement in single transaction (S4)
+    let transaction: Awaited<ReturnType<typeof prisma.creditTransaction.create>>
+    let balanceAfter: number
 
-    if (body.amount > currentOutstanding) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Settlement amount cannot exceed outstanding balance",
-        },
-        { status: 400 }
-      )
+    try {
+      const result = await withTransaction(async (tx) => {
+        // Calculate current outstanding inside transaction for atomicity
+        const transactions = await tx.creditTransaction.findMany({
+          where: { customerId: id },
+        })
+
+        const currentOutstanding = transactions.reduce((sum, t) => {
+          if (t.type === "CREDIT_SALE") {
+            return sum + Number(t.amount)
+          } else {
+            return sum - Number(t.amount)
+          }
+        }, 0)
+
+        if (body.amount > currentOutstanding) {
+          throw { type: "EXCEEDS_BALANCE", currentOutstanding }
+        }
+
+        const bal = currentOutstanding - body.amount
+
+        const tx_result = await tx.creditTransaction.create({
+          data: {
+            customerId: id,
+            type: "SETTLEMENT",
+            amount: body.amount,
+            paymentMethod: body.paymentMethod,
+            reference: body.reference || null,
+            notes: body.notes || null,
+            date: new Date(body.date),
+            createdBy: auth.user!.id,
+            balanceAfter: bal,
+          },
+          include: {
+            user: { select: { id: true, name: true } },
+          },
+        })
+
+        return { transaction: tx_result, balanceAfter: bal }
+      })
+
+      transaction = result.transaction
+      balanceAfter = result.balanceAfter
+    } catch (err: unknown) {
+      if (err && typeof err === "object" && "type" in err && (err as { type: string }).type === "EXCEEDS_BALANCE") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Settlement amount cannot exceed outstanding balance",
+          },
+          { status: 400 }
+        )
+      }
+      throw err
     }
-
-    const balanceAfter = currentOutstanding - body.amount
-
-    // Create settlement transaction
-    const transaction = await prisma.creditTransaction.create({
-      data: {
-        customerId: id,
-        type: "SETTLEMENT",
-        amount: body.amount,
-        paymentMethod: body.paymentMethod,
-        reference: body.reference || null,
-        notes: body.notes || null,
-        date: new Date(body.date),
-        createdBy: auth.user!.id,
-        balanceAfter,
-      },
-      include: {
-        user: { select: { id: true, name: true } },
-      },
-    })
 
     await createAuditLog({
       action: "SETTLEMENT_RECORDED",
@@ -238,7 +284,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { status: 201 }
     )
   } catch (error) {
-    console.error("Error recording settlement:", error)
+    logError("Error recording settlement", error)
     return NextResponse.json(
       { success: false, error: "Failed to record settlement" },
       { status: 500 }
@@ -246,17 +292,3 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// Helper function to calculate outstanding balance
-async function calculateOutstanding(customerId: string): Promise<number> {
-  const transactions = await prisma.creditTransaction.findMany({
-    where: { customerId },
-  })
-
-  return transactions.reduce((sum, tx) => {
-    if (tx.type === "CREDIT_SALE") {
-      return sum + Number(tx.amount)
-    } else {
-      return sum - Number(tx.amount)
-    }
-  }, 0)
-}

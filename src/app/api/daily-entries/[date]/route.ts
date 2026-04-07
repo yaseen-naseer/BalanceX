@@ -6,6 +6,7 @@ import { DailyEntryStatus } from '@prisma/client'
 import { validateBeforeSubmit } from '@/lib/validations/daily-entry'
 import { updateDailyEntrySchema, validateRequestBody } from '@/lib/validations'
 import { successResponse, ApiErrors } from '@/lib/api-response'
+import { logError } from '@/lib/logger'
 import {
   getCashSettlements,
   getWalletTopupsFromCash,
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       calculationData: { cashSettlements, walletTopupsFromCash },
     })
   } catch (error) {
-    console.error('Error fetching daily entry:', error)
+    logError('Error fetching daily entry', error)
     return ApiErrors.serverError('Failed to fetch daily entry')
   }
 }
@@ -91,6 +92,30 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     if (existingEntry.status === 'SUBMITTED' && auth.user!.role !== 'OWNER') {
       return ApiErrors.forbidden('Cannot edit submitted entry')
+    }
+
+    // B8: Auto-create amendment trail when OWNER directly edits a SUBMITTED entry
+    if (existingEntry.status === 'SUBMITTED' && auth.user!.role === 'OWNER') {
+      // Check if there's already an open amendment
+      const openAmendment = await prisma.dailyEntryAmendment.findFirst({
+        where: { dailyEntryId: existingEntry.id, resubmittedAt: null },
+      })
+      if (!openAmendment) {
+        // Capture snapshot before OWNER edit and auto-create amendment
+        const fullEntry = await prisma.dailyEntry.findUnique({
+          where: { id: existingEntry.id },
+          include: fullEntryInclude,
+        })
+        const snapshotBefore = JSON.stringify(convertPrismaDecimals(fullEntry))
+        await prisma.dailyEntryAmendment.create({
+          data: {
+            dailyEntryId: existingEntry.id,
+            reason: 'Owner direct edit on submitted entry',
+            reopenedBy: auth.user!.id,
+            snapshotBefore,
+          },
+        })
+      }
     }
 
     // Validate request body
@@ -198,13 +223,32 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           }),
         ])
       } else {
-        // First-time submission
+        // First-time submission — log full snapshot for audit trail
+        const categories = serializedFinal?.categories || []
+        let totalCash = 0, totalTransfer = 0, totalCredit = 0
+        for (const cat of categories) {
+          totalCash += Number(cat.consumerCash || 0) + Number(cat.corporateCash || 0)
+          totalTransfer += Number(cat.consumerTransfer || 0) + Number(cat.corporateTransfer || 0)
+          totalCredit += Number(cat.consumerCredit || 0) + Number(cat.corporateCredit || 0)
+        }
+        const cashDrawer = serializedFinal?.cashDrawer
+        const wallet = serializedFinal?.wallet
+
         await prisma.auditLog.create({
           data: {
             action: 'DAILY_ENTRY_SUBMITTED',
             userId: auth.user!.id,
             targetId: existingEntry.id,
-            details: JSON.stringify({ date }),
+            details: JSON.stringify({
+              date,
+              totalCash,
+              totalTransfer,
+              totalCredit,
+              totalSales: totalCash + totalTransfer + totalCredit,
+              cashVariance: cashDrawer ? Number(cashDrawer.variance || 0) : null,
+              walletVariance: wallet ? Number(wallet.variance || 0) : null,
+              categoryCount: categories.length,
+            }),
           },
         })
       }
@@ -216,7 +260,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         const depositAmount = Number(finalEntry?.cashDrawer?.bankDeposits ?? 0)
         await syncDailyEntryBankDeposit(entryDate, depositAmount, auth.user!.id)
       } catch (bankSyncError) {
-        console.error('Bank sync error (non-fatal, entry remains submitted):', bankSyncError)
+        logError('Bank sync error (non-fatal, entry remains submitted)', bankSyncError)
       }
     }
 
@@ -231,7 +275,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     return successResponse(serializedFinalEntry)
   } catch (error) {
-    console.error('Error updating daily entry:', error)
+    logError('Error updating daily entry', error)
     return ApiErrors.serverError('Failed to update daily entry')
   }
 }

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight, DollarSign, CreditCard, BarChart3, Download, Calendar } from 'lucide-react'
 import { format, subMonths, addMonths } from 'date-fns'
+import { CURRENCY_CODE } from '@/lib/constants'
 import { useReports, type MonthlyReportData } from '@/hooks/use-reports'
 import {
   SummaryCard,
@@ -117,13 +118,13 @@ export default function ReportsPage() {
       <div className="flex-1 space-y-6 p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={handlePrevMonth}>
+            <Button variant="outline" size="icon" onClick={handlePrevMonth} aria-label="Previous month">
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <h2 className="text-xl font-semibold min-w-[180px] text-center">
               {data?.monthLabel || format(new Date(currentMonth + '-01'), 'MMMM yyyy')}
             </h2>
-            <Button variant="outline" size="icon" onClick={handleNextMonth}>
+            <Button variant="outline" size="icon" onClick={handleNextMonth} aria-label="Next month">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -144,14 +145,14 @@ export default function ReportsPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             title="Total Revenue"
-            value={`${(data?.summary.totalRevenue || 0).toLocaleString()} MVR`}
+            value={`${(data?.summary.totalRevenue || 0).toLocaleString()} ${CURRENCY_CODE}`}
             subtitle={`${data?.summary.submittedDays || 0} days recorded`}
             icon={DollarSign}
             isLoading={isLoading}
           />
           <SummaryCard
             title="Daily Average"
-            value={`${Math.round(data?.summary.dailyAverage || 0).toLocaleString()} MVR`}
+            value={`${Math.round(data?.summary.dailyAverage || 0).toLocaleString()} ${CURRENCY_CODE}`}
             subtitle="Per working day"
             icon={BarChart3}
             isLoading={isLoading}
@@ -166,7 +167,7 @@ export default function ReportsPage() {
           />
           <SummaryCard
             title="Credit Outstanding"
-            value={`${totalCredit.toLocaleString()} MVR`}
+            value={`${totalCredit.toLocaleString()} ${CURRENCY_CODE}`}
             subtitle={`${creditCustomers} customers with balance`}
             icon={CreditCard}
             variant={creditVariant as 'default' | 'success' | 'warning' | 'danger'}

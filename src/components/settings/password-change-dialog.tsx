@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useApiClient } from '@/hooks/use-api-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,6 +22,7 @@ export interface PasswordChangeDialogProps {
 }
 
 export function PasswordChangeDialog({ trigger }: PasswordChangeDialogProps) {
+  const api = useApiClient()
   const [open, setOpen] = useState(false)
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
@@ -47,22 +49,17 @@ export function PasswordChangeDialog({ trigger }: PasswordChangeDialogProps) {
 
     setIsChanging(true)
     try {
-      const response = await fetch('/api/users/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentPassword: passwordData.currentPassword,
-          newPassword: passwordData.newPassword,
-        }),
+      const result = await api.post('/api/users/change-password', {
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
       })
 
-      if (response.ok) {
+      if (result.success) {
         toast.success('Password changed successfully')
         setOpen(false)
         setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
       } else {
-        const data = await response.json()
-        toast.error(data.error || 'Failed to change password')
+        toast.error(result.error || 'Failed to change password')
       }
     } catch {
       toast.error('Failed to change password')

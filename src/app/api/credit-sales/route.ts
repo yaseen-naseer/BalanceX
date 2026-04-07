@@ -5,6 +5,11 @@ import { PERMISSIONS } from "@/lib/permissions"
 import { createCreditSaleSchema, validateRequestBody } from "@/lib/validations"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 import { checkWalletSufficiency } from "@/lib/utils/wallet-check"
+import { withTransaction } from "@/lib/utils/atomic"
+import { calculateCustomerOutstanding } from "@/lib/calculations/credit"
+import { convertPrismaDecimals } from "@/lib/utils/serialize"
+import { CURRENCY_CODE } from "@/lib/constants"
+import { logError } from "@/lib/logger"
 
 // POST /api/credit-sales - Create a new credit sale
 export async function POST(request: NextRequest) {
@@ -35,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     // Resolve the credit customer
     let customerId: string
-    let wholesaleCustomer: { id: string; name: string; phone: string; discountOverride: unknown } | null = null
+    let wholesaleCustomer: { id: string; name: string; phone: string; discountOverride: unknown; isActive: boolean } | null = null
 
     if (wholesaleCustomerId) {
       // Wholesale flow: look up wholesale customer, then find/create credit customer
@@ -48,6 +53,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { success: false, error: "Wholesale customer not found" },
           { status: 404 }
+        )
+      }
+
+      // B7: Reject credit sales for deactivated wholesale customers
+      if (!wholesaleCustomer.isActive) {
+        return NextResponse.json(
+          { success: false, error: "Wholesale customer is deactivated" },
+          { status: 400 }
         )
       }
 
@@ -96,54 +109,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calculate current outstanding balance
-    const transactions = await prisma.creditTransaction.findMany({
-      where: { customerId },
-    })
-
-    const outstandingBalance = transactions.reduce((sum, tx) => {
-      if (tx.type === "CREDIT_SALE") {
-        return sum + Number(tx.amount)
-      } else {
-        return sum - Number(tx.amount)
-      }
-    }, 0)
-
-    // For wholesale credit, the credit balance tracks cashAmount (what customer owes)
-    // For regular credit, it tracks amount
-    const creditBalanceAmount = cashAmount ?? amount
-
-    // Check credit limit
-    const newBalance = outstandingBalance + creditBalanceAmount
-    let limitExceeded = false
-    let limitAmount = 0
-
-    if (customer.creditLimit !== null && newBalance > Number(customer.creditLimit)) {
-      limitExceeded = true
-      limitAmount = Number(customer.creditLimit)
-    }
-
-    // Enforce credit limit for non-Owner users
-    // Only Owner can override credit limits
-    if (limitExceeded && !isOwner && !overrideLimit) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Credit limit exceeded. Owner approval required.",
-          requiresOwnerApproval: true,
-          limitDetails: {
-            currentBalance: outstandingBalance,
-            saleAmount: creditBalanceAmount,
-            newBalance,
-            creditLimit: limitAmount,
-            exceededBy: newBalance - limitAmount,
-          },
-        },
-        { status: 403 }
-      )
-    }
-
-    // If overrideLimit is sent by non-Owner, reject it (security check)
+    // If overrideLimit is sent by non-Owner, reject it early (security check)
     if (overrideLimit && !isOwner) {
       return NextResponse.json(
         { success: false, error: "Only Owner can override credit limits" },
@@ -163,82 +129,155 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check wallet balance for wholesale credit sales
-    if (category === "WHOLESALE_RELOAD") {
-      const walletError = await checkWalletSufficiency("WHOLESALE_RELOAD", amount)
-      if (walletError) {
-        return NextResponse.json(
-          { success: false, error: walletError },
-          { status: 400 }
-        )
+    // For wholesale credit, the credit balance tracks cashAmount (what customer owes)
+    // For regular credit, it tracks amount
+    const creditBalanceAmount = cashAmount ?? amount
+
+    // Atomic: credit balance check + wallet check + sale + transaction + line item creation
+    // All inside a single Serializable transaction to prevent race conditions (S2, S3, S11)
+    let creditSale: Awaited<ReturnType<typeof prisma.creditSale.create>>
+    let limitExceeded = false
+    let limitAmount = 0
+    let outstandingBalance = 0
+    let newBalance = 0
+
+    try {
+      const result = await withTransaction(async (tx) => {
+        // Calculate current outstanding balance (inside transaction for atomicity — S3)
+        const outstanding = await calculateCustomerOutstanding(customerId, tx)
+
+        const balance = outstanding + creditBalanceAmount
+        let exceeded = false
+        let limit = 0
+
+        if (customer.creditLimit !== null && balance > Number(customer.creditLimit)) {
+          exceeded = true
+          limit = Number(customer.creditLimit)
+        }
+
+        // Enforce credit limit for non-Owner users
+        if (exceeded && !isOwner && !overrideLimit) {
+          throw {
+            type: "CREDIT_LIMIT_EXCEEDED",
+            outstanding,
+            balance,
+            limit,
+          }
+        }
+
+        // Check wallet balance for wholesale credit sales (inside transaction — S2)
+        if (category === "WHOLESALE_RELOAD") {
+          const walletError = await checkWalletSufficiency("WHOLESALE_RELOAD", amount, tx)
+          if (walletError) {
+            throw { type: "WALLET_INSUFFICIENT", message: walletError }
+          }
+        }
+
+        // Create corresponding credit transaction first (S11 — atomic with sale)
+        const overrideNote = exceeded && isOwner
+          ? `LIMIT_OVERRIDE: Approved by ${auth.user!.name || auth.user!.username} (exceeded by ${(balance - limit).toLocaleString()} ${CURRENCY_CODE})`
+          : null
+
+        const creditTx = await tx.creditTransaction.create({
+          data: {
+            customerId,
+            type: "CREDIT_SALE",
+            amount: creditBalanceAmount,
+            date: dailyEntry.date,
+            balanceAfter: balance,
+            reference: reference || null,
+            notes: overrideNote,
+            createdBy: auth.user!.id,
+          },
+        })
+
+        // Create the credit sale with FK to transaction (B1)
+        const sale = await tx.creditSale.create({
+          data: {
+            dailyEntryId,
+            customerId,
+            wholesaleCustomerId: wholesaleCustomerId ?? null,
+            creditTransactionId: creditTx.id,
+            category: category || "DHIRAAGU_BILLS",
+            amount,
+            cashAmount: cashAmount ?? null,
+            discountPercent: discountPercent ?? null,
+            reference: reference || null,
+          },
+          include: {
+            customer: { select: { id: true, name: true, type: true, creditLimit: true } },
+          },
+        })
+
+        // For wholesale credit sales: create SaleLineItem with FK to credit sale (B2, S11 — atomic)
+        if (category === "WHOLESALE_RELOAD" && wholesaleCustomerId) {
+          await tx.saleLineItem.create({
+            data: {
+              dailyEntryId,
+              category: "WHOLESALE_RELOAD",
+              customerType: customer.type,
+              paymentMethod: "CREDIT",
+              amount,
+              cashAmount: cashAmount ?? null,
+              discountPercent: discountPercent ?? null,
+              wholesaleCustomerId,
+              creditSaleId: sale.id,
+              note: `Credit sale #${sale.id}`,
+              createdBy: auth.user!.id,
+            },
+          })
+
+          // Sync the category cell total (grid shows cash received)
+          const fieldName = customer.type === "CONSUMER" ? "consumerCredit" : "corporateCredit"
+          const items = await tx.saleLineItem.findMany({
+            where: { dailyEntryId, category: "WHOLESALE_RELOAD", customerType: customer.type, paymentMethod: "CREDIT" },
+            select: { cashAmount: true, amount: true },
+          })
+          const cellTotal = items.reduce((sum, item) => sum + Number(item.cashAmount ?? item.amount), 0)
+          await tx.dailyEntryCategory.upsert({
+            where: { dailyEntryId_category: { dailyEntryId, category: "WHOLESALE_RELOAD" } },
+            update: { [fieldName]: cellTotal },
+            create: { dailyEntryId, category: "WHOLESALE_RELOAD", [fieldName]: cellTotal },
+          })
+        }
+
+        return { sale, exceeded, limit, outstanding, balance }
+      })
+
+      creditSale = result.sale
+      limitExceeded = result.exceeded
+      limitAmount = result.limit
+      outstandingBalance = result.outstanding
+      newBalance = result.balance
+    } catch (err: unknown) {
+      // Handle structured errors from inside the transaction
+      if (err && typeof err === "object" && "type" in err) {
+        const typed = err as { type: string; outstanding?: number; balance?: number; limit?: number; message?: string }
+        if (typed.type === "CREDIT_LIMIT_EXCEEDED") {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Credit limit exceeded. Owner approval required.",
+              requiresOwnerApproval: true,
+              limitDetails: {
+                currentBalance: typed.outstanding,
+                saleAmount: creditBalanceAmount,
+                newBalance: typed.balance,
+                creditLimit: typed.limit,
+                exceededBy: (typed.balance ?? 0) - (typed.limit ?? 0),
+              },
+            },
+            { status: 403 }
+          )
+        }
+        if (typed.type === "WALLET_INSUFFICIENT") {
+          return NextResponse.json(
+            { success: false, error: typed.message },
+            { status: 400 }
+          )
+        }
       }
-    }
-
-    // Create the credit sale
-    const creditSale = await prisma.creditSale.create({
-      data: {
-        dailyEntryId,
-        customerId,
-        wholesaleCustomerId: wholesaleCustomerId ?? null,
-        category: category || "DHIRAAGU_BILLS",
-        amount, // reload amount for wholesale, regular amount otherwise
-        cashAmount: cashAmount ?? null,
-        discountPercent: discountPercent ?? null,
-        reference: reference || null,
-      },
-      include: {
-        customer: { select: { id: true, name: true, type: true, creditLimit: true } },
-      },
-    })
-
-    // Create corresponding credit transaction
-    // Track limit override in notes if applicable
-    const overrideNote = limitExceeded && isOwner
-      ? `LIMIT_OVERRIDE: Approved by ${auth.user!.name || auth.user!.username} (exceeded by ${(newBalance - limitAmount).toLocaleString()} MVR)`
-      : null
-
-    await prisma.creditTransaction.create({
-      data: {
-        customerId,
-        type: "CREDIT_SALE",
-        amount: creditBalanceAmount, // cashAmount for wholesale (what they owe), amount for regular
-        date: dailyEntry.date,
-        balanceAfter: newBalance,
-        reference: reference || null,
-        notes: overrideNote,
-        createdBy: auth.user!.id,
-      },
-    })
-
-    // For wholesale credit sales: create a SaleLineItem so wallet calculations include the reload
-    if (category === "WHOLESALE_RELOAD" && wholesaleCustomerId) {
-      await prisma.saleLineItem.create({
-        data: {
-          dailyEntryId,
-          category: "WHOLESALE_RELOAD",
-          customerType: customer.type,
-          paymentMethod: "CREDIT",
-          amount, // reload amount (wallet deduction)
-          cashAmount: cashAmount ?? null,
-          discountPercent: discountPercent ?? null,
-          wholesaleCustomerId,
-          note: `Credit sale #${creditSale.id}`,
-          createdBy: auth.user!.id,
-        },
-      })
-
-      // Sync the category cell total (grid shows cash received)
-      const fieldName = customer.type === "CONSUMER" ? "consumerCredit" : "corporateCredit"
-      const items = await prisma.saleLineItem.findMany({
-        where: { dailyEntryId, category: "WHOLESALE_RELOAD", customerType: customer.type, paymentMethod: "CREDIT" },
-        select: { cashAmount: true, amount: true },
-      })
-      const cellTotal = items.reduce((sum, item) => sum + Number(item.cashAmount ?? item.amount), 0)
-      await prisma.dailyEntryCategory.upsert({
-        where: { dailyEntryId_category: { dailyEntryId, category: "WHOLESALE_RELOAD" } },
-        update: { [fieldName]: cellTotal },
-        create: { dailyEntryId, category: "WHOLESALE_RELOAD", [fieldName]: cellTotal },
-      })
+      throw err
     }
 
     // Log credit sale
@@ -280,14 +319,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: creditSale,
+      data: convertPrismaDecimals(creditSale),
       limitOverridden: limitExceeded && isOwner,
       warning: limitExceeded
-        ? `Credit limit of ${limitAmount.toLocaleString()} MVR exceeded (Owner override). New balance: ${newBalance.toLocaleString()} MVR`
+        ? `Credit limit of ${limitAmount.toLocaleString()} ${CURRENCY_CODE} exceeded (Owner override). New balance: ${newBalance.toLocaleString()} ${CURRENCY_CODE}`
         : null,
     })
   } catch (error) {
-    console.error("Error creating credit sale:", error)
+    logError("Error creating credit sale", error)
     return NextResponse.json(
       { success: false, error: "Failed to create credit sale" },
       { status: 500 }
@@ -295,10 +334,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE /api/credit-sales - Delete a credit sale
+// DELETE /api/credit-sales - Delete a credit sale (Owner/Accountant only)
 export async function DELETE(request: NextRequest) {
-  // Use requirePermission for proper authorization
-  const auth = await requirePermission(PERMISSIONS.CREDIT_SALE_CREATE)
+  const auth = await requirePermission(PERMISSIONS.CREDIT_SALE_DELETE)
   if (auth.error) return auth.error
 
   try {
@@ -336,36 +374,30 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Delete the credit sale, credit transaction, and any linked sale line item atomically
+    // Delete linked records using FKs (B1, B2) then the credit sale itself — atomically
     const transactionOps = [
-      // Delete the corresponding credit transaction to avoid orphaned records
-      prisma.creditTransaction.deleteMany({
-        where: {
-          customerId: creditSale.customerId,
-          type: "CREDIT_SALE",
-          amount: creditSale.amount,
-          date: creditSale.dailyEntry.date,
-          // Reference should match the credit sale ID or be null
-          OR: [
-            { reference: creditSale.reference },
-            { reference: id },
-            { reference: null },
-          ],
-        },
-      }),
-      // Delete linked wholesale sale line item (note contains credit sale ID)
+      // Delete the linked sale line item by FK (B2 — replaces fuzzy note matching)
       prisma.saleLineItem.deleteMany({
-        where: {
-          dailyEntryId: creditSale.dailyEntryId,
-          category: "WHOLESALE_RELOAD",
-          paymentMethod: "CREDIT",
-          note: `Credit sale #${id}`,
-        },
+        where: { creditSaleId: id },
       }),
-      // Delete the credit sale
+      // Delete the credit sale (this nullifies the FK on CreditTransaction since it's optional)
       prisma.creditSale.delete({
         where: { id },
       }),
+      // Delete the corresponding credit transaction by FK (B1 — replaces fuzzy matching)
+      ...(creditSale.creditTransactionId
+        ? [prisma.creditTransaction.delete({ where: { id: creditSale.creditTransactionId } })]
+        : [
+            // Fallback for legacy sales created before B1 FK was added
+            prisma.creditTransaction.deleteMany({
+              where: {
+                customerId: creditSale.customerId,
+                type: "CREDIT_SALE",
+                amount: creditSale.amount,
+                date: creditSale.dailyEntry.date,
+              },
+            }),
+          ]),
     ]
 
     await prisma.$transaction(transactionOps)
@@ -408,7 +440,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deleting credit sale:", error)
+    logError("Error deleting credit sale", error)
     return NextResponse.json(
       { success: false, error: "Failed to delete credit sale" },
       { status: 500 }

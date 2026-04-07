@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus, Search, AlertCircle } from 'lucide-react'
+import { CURRENCY_CODE } from '@/lib/constants'
 import { useCreditCustomers } from '@/hooks/use-credit-customers'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -59,7 +60,7 @@ export default function CreditCustomersPage() {
     if (result) {
       const customer = customers.find((c) => c.id === customerId)
       toast.success(
-        `Settlement of ${data.amount.toLocaleString()} MVR recorded for ${customer?.name}`
+        `Settlement of ${data.amount.toLocaleString()} ${CURRENCY_CODE} recorded for ${customer?.name}`
       )
     }
   }

@@ -18,7 +18,11 @@ export const PERMISSIONS = {
 
   // Credit Transactions
   CREDIT_SALE_CREATE: "credit_sale:create",
+  CREDIT_SALE_DELETE: "credit_sale:delete",
   SETTLEMENT_RECORD: "settlement:record",
+
+  // Wholesale Customers
+  WHOLESALE_CUSTOMER_EDIT: "wholesale_customer:edit",
 
   // Bank
   BANK_VIEW: "bank:view",
@@ -69,7 +73,9 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.CREDIT_CUSTOMER_CREATE,
     PERMISSIONS.CREDIT_CUSTOMER_EDIT,
     PERMISSIONS.CREDIT_SALE_CREATE,
+    PERMISSIONS.CREDIT_SALE_DELETE,
     PERMISSIONS.SETTLEMENT_RECORD,
+    PERMISSIONS.WHOLESALE_CUSTOMER_EDIT,
     PERMISSIONS.BANK_VIEW,
     PERMISSIONS.BANK_DEPOSIT,
     PERMISSIONS.BANK_WITHDRAW,

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useApiClient } from '@/hooks/use-api-client'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
@@ -26,6 +27,7 @@ export interface LedgerDialogProps {
 }
 
 export function LedgerDialog({ customer, trigger }: LedgerDialogProps) {
+  const api = useApiClient()
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [customerData, setCustomerData] = useState<CustomerWithTransactions | null>(null)
@@ -33,9 +35,8 @@ export function LedgerDialog({ customer, trigger }: LedgerDialogProps) {
   const fetchLedger = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/credit-customers/${customer.id}`)
-      const result = await response.json()
-      if (result.success) {
+      const result = await api.get<CustomerWithTransactions>(`/api/credit-customers/${customer.id}`)
+      if (result.success && result.data) {
         setCustomerData(result.data)
       }
     } catch (error) {

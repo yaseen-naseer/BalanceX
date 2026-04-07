@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { getAuthenticatedUser } from "@/lib/api-auth"
 import { startOfMonth, endOfMonth, format, differenceInDays } from "date-fns"
+import { logError } from "@/lib/logger"
 
 // GET /api/reports?month=2026-01 - Get monthly report data
 export async function GET(request: NextRequest) {
@@ -276,7 +277,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Error fetching report data:", error)
+    logError("Error fetching report data", error)
     return NextResponse.json(
       { success: false, error: "Failed to fetch report data" },
       { status: 500 }

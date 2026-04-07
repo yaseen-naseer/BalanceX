@@ -6,6 +6,7 @@ import { CategoryType } from "@prisma/client"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
 import { createDailyEntrySchema, validateRequestBody, validateDate } from "@/lib/validations"
 import { createAuditLog } from "@/lib/audit"
+import { logError } from "@/lib/logger"
 
 // GET /api/daily-entries - List daily entries
 export async function GET(request: NextRequest) {
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
       pagination: { total, limit, offset },
     })
   } catch (error) {
-    console.error("Error fetching daily entries:", error)
+    logError("Error fetching daily entries", error)
     return NextResponse.json(
       { success: false, error: "Failed to fetch daily entries" },
       { status: 500 }
@@ -201,7 +202,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: serializedEntry }, { status: 201 })
   } catch (error) {
-    console.error("Error creating daily entry:", error)
+    logError("Error creating daily entry", error)
     return NextResponse.json(
       { success: false, error: "Failed to create daily entry" },
       { status: 500 }

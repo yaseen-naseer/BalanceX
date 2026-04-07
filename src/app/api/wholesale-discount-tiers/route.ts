@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from "@/lib/api-auth"
 import { requireRole } from "@/lib/api-auth"
 import { successResponse, ApiErrors } from "@/lib/api-response"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
+import { logError } from "@/lib/logger"
 
 const DEFAULT_TIERS = [
   { discountPercent: 6.0, minCashAmount: 500, sortOrder: 1, isActive: true },
@@ -35,7 +36,7 @@ export async function GET() {
 
     return successResponse(convertPrismaDecimals(tiers))
   } catch (error) {
-    console.error("Error fetching discount tiers:", error)
+    logError("Error fetching discount tiers", error)
     return ApiErrors.serverError("Failed to fetch discount tiers")
   }
 }
@@ -108,7 +109,7 @@ export async function PATCH(request: NextRequest) {
 
     return successResponse(convertPrismaDecimals(updated))
   } catch (error) {
-    console.error("Error updating discount tiers:", error)
+    logError("Error updating discount tiers", error)
     return ApiErrors.serverError("Failed to update discount tiers")
   }
 }

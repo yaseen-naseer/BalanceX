@@ -52,10 +52,7 @@ import {
   ReopenDialog,
   AmendmentHistory,
 } from '@/components/daily-entry'
-
-// CASH FLOAT — disabled (shop does not use a till/float)
-// Re-enable by uncommenting all /* CASH FLOAT */ blocks below and restoring imports/state
-// import { CashFloatSummary, CashFloatDialog } from '@/components/cash-float'
+import { DailyEntryProvider } from '@/contexts/daily-entry-context'
 
 export default function DailyEntryPage() {
   const [currentDate, setCurrentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -63,27 +60,6 @@ export default function DailyEntryPage() {
   const [varianceMessages, setVarianceMessages] = useState<ValidationMessage[]>([])
 
   const { user } = useAuth()
-
-  /* CASH FLOAT STATE
-  interface CashFloatData {
-    id: string
-    shiftName: string
-    selectedFloatAmount: number
-    selectedFloatId?: string
-    openingTotal?: number
-    closingTotal?: number
-    variance?: number
-    openingFloatVerified?: boolean
-    closingFloatVerified?: boolean
-    openingFloatNotes?: string
-    closingFloatNotes?: string
-    [key: string]: string | number | boolean | undefined
-  }
-  const [cashFloat, setCashFloat] = useState<CashFloatData | null>(null)
-  const [showFloatDialog, setShowFloatDialog] = useState(false)
-  const [floatDialogType, setFloatDialogType] = useState<'opening' | 'closing'>('opening')
-  const [isLoadingFloat, setIsLoadingFloat] = useState(false)
-  */
 
   // Use the extracted form hook
   const form = useDailyEntryForm({ date: currentDate })
@@ -102,49 +78,6 @@ export default function DailyEntryPage() {
   const handleDateChange = (date: string) => {
     guard(() => setCurrentDate(date))
   }
-
-  /* CASH FLOAT FETCH
-  const fetchCashFloat = async () => {
-    setIsLoadingFloat(true)
-    try {
-      const res = await fetch(`/api/cash-float?date=${currentDate}`)
-      if (res.ok) {
-        const data = await res.json()
-        if (data.success) {
-          setCashFloat(data.data.cashFloat)
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching cash float:', error)
-    } finally {
-      setIsLoadingFloat(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!form.isLoading) {
-      fetchCashFloat()
-    }
-  }, [currentDate, form.isLoading])
-
-  const handleRecordOpening = () => {
-    if (!form.entry) {
-      toast.error('Save a draft first before recording cash float')
-      return
-    }
-    setFloatDialogType('opening')
-    setShowFloatDialog(true)
-  }
-
-  const handleRecordClosing = () => {
-    if (!form.entry) {
-      toast.error('Save a draft first before recording cash float')
-      return
-    }
-    setFloatDialogType('closing')
-    setShowFloatDialog(true)
-  }
-  */
 
   // Check if current user can reopen
   const canReopen = useMemo(() => {
@@ -221,6 +154,7 @@ export default function DailyEntryPage() {
   }
 
   return (
+    <DailyEntryProvider form={form} wholesale={wholesale}>
     <div className="flex flex-col">
       <Header title="Daily Sales Entry" subtitle={subtitle} />
 
@@ -423,15 +357,6 @@ export default function DailyEntryPage() {
               />
             </div>
 
-            {/* CASH FLOAT SUMMARY — disabled
-            <CashFloatSummary
-              cashFloat={cashFloat}
-              isReadOnly={form.isReadOnly}
-              onRecordOpening={handleRecordOpening}
-              onRecordClosing={handleRecordClosing}
-            />
-            */}
-
             {/* Notes */}
             <Card>
               <CardHeader>
@@ -492,20 +417,7 @@ export default function DailyEntryPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* CASH FLOAT DIALOG — disabled
-      {form.entry && (
-        <CashFloatDialog
-          open={showFloatDialog}
-          onOpenChange={setShowFloatDialog}
-          dailyEntryId={form.entry.id}
-          date={currentDate}
-          type={floatDialogType}
-          existingFloat={cashFloat}
-          cashExpected={form.variance.cashExpected}
-          onSuccess={fetchCashFloat}
-        />
-      )}
-      */}
     </div>
+    </DailyEntryProvider>
   )
 }

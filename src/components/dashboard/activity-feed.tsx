@@ -2,6 +2,7 @@
 
 import { FileSpreadsheet, CreditCard, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
+import { CURRENCY_CODE } from '@/lib/constants'
 
 export interface ActivityItem {
   id: string
@@ -42,7 +43,7 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
           <div className="flex-1 space-y-0.5">
             <p className="text-sm font-medium leading-none">{item.description}</p>
             <p className="text-xs text-muted-foreground">
-              MVR {item.amount.toLocaleString()} by {item.user}
+              {CURRENCY_CODE} {item.amount.toLocaleString()} by {item.user}
             </p>
           </div>
           <span className="text-xs text-muted-foreground">

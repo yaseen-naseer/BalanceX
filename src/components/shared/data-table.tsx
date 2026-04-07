@@ -477,6 +477,7 @@ export function DataTable<T>({
               className="h-8 w-8"
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}
+              aria-label="First page"
             >
               <ChevronsLeft className="h-4 w-4" />
             </Button>
@@ -486,6 +487,7 @@ export function DataTable<T>({
               className="h-8 w-8"
               onClick={() => setCurrentPage((p) => p - 1)}
               disabled={currentPage === 1}
+              aria-label="Previous page"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -498,6 +500,7 @@ export function DataTable<T>({
               className="h-8 w-8"
               onClick={() => setCurrentPage((p) => p + 1)}
               disabled={currentPage === totalPages}
+              aria-label="Next page"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -507,6 +510,7 @@ export function DataTable<T>({
               className="h-8 w-8"
               onClick={() => setCurrentPage(totalPages)}
               disabled={currentPage === totalPages}
+              aria-label="Last page"
             >
               <ChevronsRight className="h-4 w-4" />
             </Button>

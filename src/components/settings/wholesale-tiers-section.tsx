@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useApiClient } from "@/hooks/use-api-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,6 +17,7 @@ interface WholesaleTiersSectionProps {
 }
 
 export function WholesaleTiersSection({ isOwner }: WholesaleTiersSectionProps) {
+  const api = useApiClient()
   const [tiers, setTiers] = useState<WholesaleDiscountTierData[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [editValues, setEditValues] = useState<Record<string, string>>({})
@@ -29,22 +31,18 @@ export function WholesaleTiersSection({ isOwner }: WholesaleTiersSectionProps) {
 
   const fetchTiers = async () => {
     try {
-      const res = await fetch("/api/wholesale-discount-tiers")
-      if (res.ok) {
-        const data = await res.json()
-        if (data.success) {
-          const tierData = data.data as WholesaleDiscountTierData[]
-          setTiers(tierData)
-          // Initialize edit values and active states
-          const values: Record<string, string> = {}
-          const actives: Record<string, boolean> = {}
-          for (const t of tierData) {
-            values[t.id] = t.minCashAmount.toString()
-            actives[t.id] = t.isActive
-          }
-          setEditValues(values)
-          setActiveStates(actives)
+      const result = await api.get<WholesaleDiscountTierData[]>("/api/wholesale-discount-tiers")
+      if (result.success && result.data) {
+        const tierData = result.data
+        setTiers(tierData)
+        const values: Record<string, string> = {}
+        const actives: Record<string, boolean> = {}
+        for (const t of tierData) {
+          values[t.id] = t.minCashAmount.toString()
+          actives[t.id] = t.isActive
         }
+        setEditValues(values)
+        setActiveStates(actives)
       }
     } catch {
       toast.error("Failed to load discount tiers")
@@ -87,18 +85,13 @@ export function WholesaleTiersSection({ isOwner }: WholesaleTiersSectionProps) {
 
     setIsSaving(true)
     try {
-      const res = await fetch("/api/wholesale-discount-tiers", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tiers: updates }),
-      })
-      const data = await res.json()
-      if (data.success) {
+      const result = await api.patch("/api/wholesale-discount-tiers", { tiers: updates })
+      if (result.success) {
         toast.success("Discount tiers updated")
         setHasChanges(false)
         fetchTiers()
       } else {
-        toast.error(data.error || "Failed to update tiers")
+        toast.error(result.error || "Failed to update tiers")
       }
     } catch {
       toast.error("Failed to update tiers")

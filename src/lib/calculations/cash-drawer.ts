@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db"
+import { toNum } from "@/lib/utils/decimal"
 
 export interface CashDrawerCalculation {
   opening: number
@@ -49,8 +50,8 @@ export async function calculateCashDrawer(
   }
 
   for (const cat of entry.categories) {
-    const consumerCash = Number(cat.consumerCash)
-    const corporateCash = Number(cat.corporateCash)
+    const consumerCash = toNum(cat.consumerCash)
+    const corporateCash = toNum(cat.corporateCash)
 
     switch (cat.category) {
       case "DHIRAAGU_BILLS":
@@ -82,7 +83,7 @@ export async function calculateCashDrawer(
       paymentMethod: "CASH",
     },
   })
-  const cashSettlements = Number(cashSettlementsAgg._sum.amount || 0)
+  const cashSettlements = toNum(cashSettlementsAgg._sum.amount)
 
   // Get wallet top-ups from cash for this date
   const walletTopupsAgg = await prisma.walletTopup.aggregate({
@@ -92,16 +93,16 @@ export async function calculateCashDrawer(
       source: "CASH",
     },
   })
-  const walletTopupsFromCash = Number(walletTopupsAgg._sum.amount || 0)
+  const walletTopupsFromCash = toNum(walletTopupsAgg._sum.amount)
 
-  const opening = entry.cashDrawer ? Number(entry.cashDrawer.opening) : 0
-  const bankDeposits = entry.cashDrawer ? Number(entry.cashDrawer.bankDeposits) : 0
-  const closingActual = entry.cashDrawer ? Number(entry.cashDrawer.closingActual) : 0
+  const opening = entry.cashDrawer ? toNum(entry.cashDrawer.opening) : 0
+  const bankDeposits = entry.cashDrawer ? toNum(entry.cashDrawer.bankDeposits) : 0
+  const closingActual = entry.cashDrawer ? toNum(entry.cashDrawer.closingActual) : 0
 
   // Get cash float data
-  const openingFloat = entry.cashFloat ? Number(entry.cashFloat.openingTotal) : 0
-  const closingFloat = entry.cashFloat ? Number(entry.cashFloat.closingTotal) : 0
-  const floatVariance = entry.cashFloat ? Number(entry.cashFloat.variance) : 0
+  const openingFloat = entry.cashFloat ? toNum(entry.cashFloat.openingTotal) : 0
+  const closingFloat = entry.cashFloat ? toNum(entry.cashFloat.closingTotal) : 0
+  const floatVariance = entry.cashFloat ? toNum(entry.cashFloat.variance) : 0
 
   // Calculate expected closing (excluding float)
   // The float stays constant in the drawer, so we calculate cash separately

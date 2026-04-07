@@ -5,14 +5,16 @@ import prisma from "@/lib/db"
 import bcrypt from "bcryptjs"
 import { changePasswordSchema, validateRequestBody } from "@/lib/validations"
 import { logError } from "@/lib/logger"
+import { BCRYPT_ROUNDS } from "@/lib/constants"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { ApiErrors } from "@/lib/api-response"
 
 // POST - Change current user's password
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     // Validate request body
@@ -27,20 +29,17 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      return ApiErrors.notFound("User")
     }
 
     // Verify current password
     const isValidPassword = await bcrypt.compare(currentPassword, user.passwordHash)
     if (!isValidPassword) {
-      return NextResponse.json(
-        { error: "Current password is incorrect" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Current password is incorrect")
     }
 
     // Hash and update new password
-    const newPasswordHash = await bcrypt.hash(newPassword, 10)
+    const newPasswordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS)
     await prisma.user.update({
       where: { id: session.user.id },
       data: { passwordHash: newPasswordHash },
@@ -57,9 +56,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     logError("Error changing password", error)
-    return NextResponse.json(
-      { error: "Failed to change password" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to change password")
   }
 }

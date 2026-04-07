@@ -9,6 +9,8 @@ import {
   validateRequestBody,
 } from "@/lib/validations"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { withTransaction } from "@/lib/utils/atomic"
+import { logError } from "@/lib/logger"
 
 // GET /api/bank - Get bank transactions and balance
 export async function GET(request: NextRequest) {
@@ -98,7 +100,7 @@ export async function GET(request: NextRequest) {
       pagination: { total, limit, offset },
     })
   } catch (error) {
-    console.error("Error fetching bank data:", error)
+    logError("Error fetching bank data", error)
     return NextResponse.json(
       { success: false, error: "Failed to fetch bank data" },
       { status: 500 }
@@ -134,45 +136,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calculate current balance before this transaction
-    const settings = await prisma.bankSettings.findFirst({
-      orderBy: { openingDate: "desc" },
-    })
+    // Atomic: calculate balance + create in a single serializable transaction
+    const transaction = await withTransaction(async (tx) => {
+      const settings = await tx.bankSettings.findFirst({
+        orderBy: { openingDate: "desc" },
+      })
 
-    const allTransactions = await prisma.bankTransaction.findMany({
-      where: {
-        date: { lte: new Date(body.date) },
-      },
-      orderBy: { date: "asc" },
-    })
+      const allTransactions = await tx.bankTransaction.findMany({
+        where: {
+          date: { lte: new Date(body.date) },
+        },
+        orderBy: { date: "asc" },
+      })
 
-    let balanceBefore = settings ? Number(settings.openingBalance) : 0
-    for (const tx of allTransactions) {
-      if (tx.type === "DEPOSIT") {
-        balanceBefore += Number(tx.amount)
-      } else {
-        balanceBefore -= Number(tx.amount)
+      let balanceBefore = settings ? Number(settings.openingBalance) : 0
+      for (const t of allTransactions) {
+        if (t.type === "DEPOSIT") {
+          balanceBefore += Number(t.amount)
+        } else {
+          balanceBefore -= Number(t.amount)
+        }
       }
-    }
 
-    const balanceAfter =
-      body.type === "DEPOSIT"
-        ? balanceBefore + body.amount
-        : balanceBefore - body.amount
+      const balanceAfter =
+        body.type === "DEPOSIT"
+          ? balanceBefore + body.amount
+          : balanceBefore - body.amount
 
-    const transaction = await prisma.bankTransaction.create({
-      data: {
-        type: body.type,
-        amount: body.amount,
-        reference: body.reference,
-        notes: body.notes || null,
-        date: new Date(body.date),
-        createdBy: auth.user!.id,
-        balanceAfter,
-      },
-      include: {
-        user: { select: { id: true, name: true } },
-      },
+      return tx.bankTransaction.create({
+        data: {
+          type: body.type,
+          amount: body.amount,
+          reference: body.reference,
+          notes: body.notes || null,
+          date: new Date(body.date),
+          createdBy: auth.user!.id,
+          balanceAfter,
+        },
+        include: {
+          user: { select: { id: true, name: true } },
+        },
+      })
     })
 
     await createAuditLog({
@@ -201,7 +205,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error("Error creating bank transaction:", error)
+    logError("Error creating bank transaction", error)
     return NextResponse.json(
       { success: false, error: "Failed to create bank transaction" },
       { status: 500 }
@@ -256,7 +260,7 @@ export async function PATCH(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Error updating bank settings:", error)
+    logError("Error updating bank settings", error)
     return NextResponse.json(
       { success: false, error: "Failed to update bank settings" },
       { status: 500 }
@@ -292,39 +296,37 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Delete the transaction
-    await prisma.bankTransaction.delete({
-      where: { id },
-    })
+    // Atomic: delete + recalculate all balances in a single serializable transaction
+    await withTransaction(async (tx) => {
+      await tx.bankTransaction.delete({
+        where: { id },
+      })
 
-    // Recalculate balances for all subsequent transactions
-    // Get all transactions ordered by date to recalculate running balances
-    const settings = await prisma.bankSettings.findFirst({
-      orderBy: { openingDate: "desc" },
-    })
+      const settings = await tx.bankSettings.findFirst({
+        orderBy: { openingDate: "desc" },
+      })
 
-    const allTransactions = await prisma.bankTransaction.findMany({
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-    })
+      const allTransactions = await tx.bankTransaction.findMany({
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      })
 
-    // Recalculate running balances
-    let runningBalance = settings ? Number(settings.openingBalance) : 0
+      let runningBalance = settings ? Number(settings.openingBalance) : 0
 
-    for (const tx of allTransactions) {
-      if (tx.type === "DEPOSIT") {
-        runningBalance += Number(tx.amount)
-      } else {
-        runningBalance -= Number(tx.amount)
+      for (const t of allTransactions) {
+        if (t.type === "DEPOSIT") {
+          runningBalance += Number(t.amount)
+        } else {
+          runningBalance -= Number(t.amount)
+        }
+
+        if (Number(t.balanceAfter) !== runningBalance) {
+          await tx.bankTransaction.update({
+            where: { id: t.id },
+            data: { balanceAfter: runningBalance },
+          })
+        }
       }
-
-      // Update if balance changed
-      if (Number(tx.balanceAfter) !== runningBalance) {
-        await prisma.bankTransaction.update({
-          where: { id: tx.id },
-          data: { balanceAfter: runningBalance },
-        })
-      }
-    }
+    })
 
     await createAuditLog({
       action: "BANK_TRANSACTION_DELETED",
@@ -342,7 +344,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deleting bank transaction:", error)
+    logError("Error deleting bank transaction", error)
     return NextResponse.json(
       { success: false, error: "Failed to delete bank transaction" },
       { status: 500 }
@@ -392,7 +394,7 @@ export async function PUT(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Error updating bank transaction:", error)
+    logError("Error updating bank transaction", error)
     return NextResponse.json(
       { success: false, error: "Failed to update bank transaction" },
       { status: 500 }

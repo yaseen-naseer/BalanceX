@@ -5,7 +5,9 @@ import prisma from "@/lib/db"
 import bcrypt from "bcryptjs"
 import { updateUserSchema, validateRequestBody } from "@/lib/validations"
 import { logError } from "@/lib/logger"
+import { BCRYPT_ROUNDS } from "@/lib/constants"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { ApiErrors } from "@/lib/api-response"
 
 // GET - Get single user (Owner only)
 export async function GET(
@@ -15,17 +17,14 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     const { id } = await params
 
     // Users can view their own profile, Owner can view all
     if (session.user.role !== "OWNER" && session.user.id !== id) {
-      return NextResponse.json(
-        { error: "Not authorized to view this user" },
-        { status: 403 }
-      )
+      return ApiErrors.forbidden("Not authorized to view this user")
     }
 
     const user = await prisma.user.findUnique({
@@ -42,16 +41,13 @@ export async function GET(
     })
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      return ApiErrors.notFound("User")
     }
 
     return NextResponse.json(user)
   } catch (error) {
     logError("Error fetching user", error)
-    return NextResponse.json(
-      { error: "Failed to fetch user" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch user")
   }
 }
 
@@ -63,7 +59,7 @@ export async function PUT(
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     const { id } = await params
@@ -76,19 +72,13 @@ export async function PUT(
     // Only Owner can update other users or change roles
     const isUpdatingSelf = session.user.id === id
     if (!isUpdatingSelf && session.user.role !== "OWNER") {
-      return NextResponse.json(
-        { error: "Only Owner can update other users" },
-        { status: 403 }
-      )
+      return ApiErrors.forbidden("Only Owner can update other users")
     }
 
     // Non-owners can only update name and email for themselves
     if (!isUpdatingSelf || session.user.role !== "OWNER") {
       if (role !== undefined || isActive !== undefined) {
-        return NextResponse.json(
-          { error: "Only Owner can change role or status" },
-          { status: 403 }
-        )
+        return ApiErrors.forbidden("Only Owner can change role or status")
       }
     }
 
@@ -96,7 +86,7 @@ export async function PUT(
     const updateData: Record<string, unknown> = {}
     if (name !== undefined) updateData.name = name
     if (email !== undefined) updateData.email = email || null
-    if (password) updateData.passwordHash = await bcrypt.hash(password, 10)
+    if (password) updateData.passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
     if (role !== undefined && session.user.role === "OWNER") updateData.role = role
     if (isActive !== undefined && session.user.role === "OWNER") updateData.isActive = isActive
 
@@ -145,10 +135,7 @@ export async function PUT(
     return NextResponse.json(user)
   } catch (error) {
     logError("Error updating user", error)
-    return NextResponse.json(
-      { error: "Failed to update user" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to update user")
   }
 }
 
@@ -160,24 +147,18 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     if (session.user.role !== "OWNER") {
-      return NextResponse.json(
-        { error: "Only Owner can delete users" },
-        { status: 403 }
-      )
+      return ApiErrors.forbidden("Only Owner can delete users")
     }
 
     const { id } = await params
 
     // Prevent deleting yourself
     if (session.user.id === id) {
-      return NextResponse.json(
-        { error: "Cannot delete your own account" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Cannot delete your own account")
     }
 
     const targetUser = await prisma.user.findUnique({
@@ -203,9 +184,6 @@ export async function DELETE(
     return NextResponse.json({ success: true, message: "User deactivated" })
   } catch (error) {
     logError("Error deleting user", error)
-    return NextResponse.json(
-      { error: "Failed to delete user" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to delete user")
   }
 }

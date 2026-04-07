@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useApiClient } from '@/hooks/use-api-client'
 import { Header } from '@/components/layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,6 +15,7 @@ import { useWallet } from '@/hooks/use-wallet'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { CURRENCY_CODE } from '@/lib/constants'
 import { AddTopupDialog, WalletSummaryCards } from '@/components/wallet'
 import type { DailyEntryWithRelations } from '@/types'
 
@@ -27,6 +29,7 @@ interface ActivityRow {
 }
 
 export default function WalletPage() {
+  const api = useApiClient()
   const { isSales } = useAuth()
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [monthEntries, setMonthEntries] = useState<DailyEntryWithRelations[]>([])
@@ -52,23 +55,22 @@ export default function WalletPage() {
     setLoadingEntries(true)
     try {
       const monthStr = format(month, 'yyyy-MM')
-      const res = await fetch(`/api/daily-entries?month=${monthStr}&limit=31`)
-      const data = await res.json()
-      if (data.success) {
-        setMonthEntries(data.data)
+      const result = await api.get<DailyEntryWithRelations[]>('/api/daily-entries', {
+        params: { month: monthStr, limit: 31 },
+      })
+      if (result.success && result.data) {
+        setMonthEntries(result.data)
 
-        // Fetch wholesale reload totals (wallet cost) per entry from line items
-        // Category grid now stores cash received, but wallet needs reload amounts
-        const entryIds = (data.data as DailyEntryWithRelations[]).map((e) => e.id)
+        const entryIds = result.data.map((e) => e.id)
         if (entryIds.length > 0) {
           const reloadMap: Record<string, number> = {}
-          // Fetch line items for all entries in batch via individual entry queries
           await Promise.all(
             entryIds.map(async (eid) => {
-              const liRes = await fetch(`/api/sale-line-items?dailyEntryId=${eid}`)
-              const liData = await liRes.json()
-              if (liData.success && liData.data) {
-                const wholesaleTotal = (liData.data as Array<{ category: string; amount: number; cashAmount: number | null }>)
+              const liResult = await api.get<Array<{ category: string; amount: number; cashAmount: number | null }>>('/api/sale-line-items', {
+                params: { dailyEntryId: eid },
+              })
+              if (liResult.success && liResult.data) {
+                const wholesaleTotal = liResult.data
                   .filter((li) => li.category === 'WHOLESALE_RELOAD')
                   .reduce((sum, li) => sum + Number(li.amount), 0)
                 if (wholesaleTotal > 0) {
@@ -87,7 +89,7 @@ export default function WalletPage() {
     } finally {
       setLoadingEntries(false)
     }
-  }, [])
+  }, [api])
 
   useEffect(() => {
     fetchMonthEntries(selectedMonth)
@@ -225,6 +227,7 @@ export default function WalletPage() {
                     size="icon"
                     className="h-8 w-8"
                     onClick={() => setSelectedMonth((m) => subMonths(m, 1))}
+                    aria-label="Previous month"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -237,6 +240,7 @@ export default function WalletPage() {
                     className="h-8 w-8"
                     onClick={() => setSelectedMonth((m) => addMonths(m, 1))}
                     disabled={isCurrentMonth}
+                    aria-label="Next month"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -338,7 +342,7 @@ export default function WalletPage() {
                         'font-mono font-semibold text-sm',
                         row.type === 'topup' ? 'text-emerald-600' : 'text-rose-600'
                       )}>
-                        {row.type === 'topup' ? '+' : '-'}{row.amount.toLocaleString()} MVR
+                        {row.type === 'topup' ? '+' : '-'}{row.amount.toLocaleString()} {CURRENCY_CODE}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(row.date + 'T12:00:00'), 'dd MMM')}

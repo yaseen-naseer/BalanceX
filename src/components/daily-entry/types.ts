@@ -90,6 +90,6 @@ export const PAYMENT_METHODS: PaymentMethodConfig[] = [
 ]
 
 /**
- * Validation thresholds
+ * Validation thresholds — re-exported from shared constants for backward compatibility
  */
-export const VARIANCE_THRESHOLD = 500 // MVR
+export { CASH_VARIANCE_THRESHOLD as VARIANCE_THRESHOLD } from "@/lib/constants"

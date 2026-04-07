@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { CategoryType } from "@prisma/client"
+import { logError } from "@/lib/logger"
 
 interface ImportedRow {
   siteName: string
@@ -259,7 +260,7 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (error) {
-    console.error("Error importing telco data:", error)
+    logError("Error importing telco data", error)
     return NextResponse.json(
       { success: false, error: "Failed to import data" },
       { status: 500 }

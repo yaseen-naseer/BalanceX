@@ -2,19 +2,24 @@ import { prisma } from "@/lib/db"
 import { calculateReloadWalletCost } from "./balance"
 import { getWholesaleReloadTotal } from "./wholesale-reload"
 import { stripRetailGst } from "./balance"
+import { CURRENCY_CODE } from "@/lib/constants"
+import type { TxClient } from "./atomic"
 
 /**
  * Get the current wallet balance (server-only).
  * Formula: opening + totalTopups - totalReloadSales
+ *
+ * Accepts an optional transaction client for use inside atomic transactions.
  */
-export async function getCurrentWalletBalance(): Promise<number> {
+export async function getCurrentWalletBalance(tx?: TxClient): Promise<number> {
+  const db = tx ?? prisma
   const [walletSettings, topupsAgg, reloadCategories, wholesaleReload] = await Promise.all([
-    prisma.walletSettings.findFirst({ orderBy: { openingDate: "desc" } }),
-    prisma.walletTopup.aggregate({ _sum: { amount: true } }),
-    prisma.dailyEntryCategory.findMany({
+    db.walletSettings.findFirst({ orderBy: { openingDate: "desc" } }),
+    db.walletTopup.aggregate({ _sum: { amount: true } }),
+    db.dailyEntryCategory.findMany({
       where: { category: { in: ["RETAIL_RELOAD", "WHOLESALE_RELOAD"] } },
     }),
-    getWholesaleReloadTotal(),
+    getWholesaleReloadTotal(tx),
   ])
 
   const opening = walletSettings ? Number(walletSettings.openingBalance) : 0
@@ -45,19 +50,22 @@ export function getWalletDeduction(
 /**
  * Check if a reload sale can be made given the current wallet balance.
  * Returns null if OK, or an error message string if insufficient balance.
+ *
+ * Accepts an optional transaction client for use inside atomic transactions.
  */
 export async function checkWalletSufficiency(
   category: string,
-  walletDeductionAmount: number
+  walletDeductionAmount: number,
+  tx?: TxClient
 ): Promise<string | null> {
   if (category !== "RETAIL_RELOAD" && category !== "WHOLESALE_RELOAD") {
     return null // not a reload category, no wallet check needed
   }
 
-  const balance = await getCurrentWalletBalance()
+  const balance = await getCurrentWalletBalance(tx)
 
   if (walletDeductionAmount > balance) {
-    return `Insufficient wallet balance. Current balance: ${balance.toLocaleString()} MVR, required: ${walletDeductionAmount.toLocaleString()} MVR`
+    return `Insufficient wallet balance. Current balance: ${balance.toLocaleString()} ${CURRENCY_CODE}, required: ${walletDeductionAmount.toLocaleString()} ${CURRENCY_CODE}`
   }
 
   return null

@@ -22,10 +22,17 @@ import {
   Bug,
   Radio,
   Type,
+  ShieldCheck,
+  Database,
+  Wrench,
+  Lock,
+  AlertTriangle,
+  Layers,
+  FileSearch,
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-03-16c'
+const WHATS_NEW_VERSION = '2026-04-07a'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -42,6 +49,88 @@ interface ChangeGroup {
 }
 
 const CHANGELOG: ChangeGroup[] = [
+  {
+    version: 'v0.5',
+    date: 'April 7, 2026',
+    items: [
+      {
+        icon: <Lock className="h-4 w-4 text-red-500" />,
+        title: 'Atomic Transactions Everywhere',
+        description:
+          'Credit sales, bank transfers, wallet reloads, and settlements are now wrapped in serializable transactions. Concurrent operations can no longer cause double-spending, over-settlement, or orphaned records.',
+        tag: 'Security',
+      },
+      {
+        icon: <AlertTriangle className="h-4 w-4 text-amber-500" />,
+        title: 'Error Boundaries & Graceful Recovery',
+        description:
+          'Every dashboard section now has a dedicated error page with a retry button. Component crashes show a helpful message instead of a blank screen.',
+        tag: 'New',
+      },
+      {
+        icon: <Layers className="h-4 w-4 text-indigo-500" />,
+        title: 'Daily Entry Refactored',
+        description:
+          'The daily entry form has been split into focused hooks for line items, calculations, validation, and submission. Line item add/edit/delete are now dedicated dialogs with audit-trail reasons.',
+        tag: 'Improvement',
+      },
+      {
+        icon: <Shield className="h-4 w-4 text-purple-500" />,
+        title: 'Stricter Validation & Access Control',
+        description:
+          'Minimum amount enforcement (0.01 MVR), future date rejection, and line item field-size limits. Exports now respect role permissions — SALES users see less sensitive data.',
+        tag: 'Security',
+      },
+      {
+        icon: <FileSearch className="h-4 w-4 text-sky-500" />,
+        title: 'Import Preview',
+        description:
+          'CSV imports now show a summary and table preview before confirming. See exactly what will be imported before it happens.',
+        tag: 'New',
+      },
+      {
+        icon: <Database className="h-4 w-4 text-emerald-500" />,
+        title: 'Performance & Precision',
+        description:
+          'Added database indexes on key columns for faster queries at scale. Financial arithmetic now uses Decimal.js to eliminate floating-point rounding errors. Large exports are capped to prevent memory issues.',
+        tag: 'Improvement',
+      },
+    ],
+  },
+  {
+    version: 'v0.4',
+    date: 'March 17, 2026',
+    items: [
+      {
+        icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
+        title: 'Security Hardening',
+        description:
+          'Added Content-Security-Policy header, explicit session cookie flags, 8-hour session timeout, timing-attack mitigation on login, and atomic account lockout. Passwords now use stronger hashing.',
+        tag: 'Security',
+      },
+      {
+        icon: <Database className="h-4 w-4 text-blue-500" />,
+        title: 'Financial Calculation Accuracy',
+        description:
+          'All financial calculations now use safe Decimal-to-number conversion instead of raw Number() casts. Wallet opening balance derivation is wrapped in a serializable transaction to prevent race conditions.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Wrench className="h-4 w-4 text-orange-500" />,
+        title: 'Performance & Reliability',
+        description:
+          'Added database indexes on frequently queried date and foreign key columns. Dashboard alerts now use batched queries instead of N+1 loops. Financial rounding uses proper half-up precision.',
+        tag: 'Improvement',
+      },
+      {
+        icon: <Shield className="h-4 w-4 text-purple-500" />,
+        title: 'Code Quality Overhaul',
+        description:
+          'Settings page migrated to standard API client. Race conditions fixed in wallet auto-load and sale line items. All API error logging now uses sanitized logger. Removed dead code.',
+        tag: 'Improvement',
+      },
+    ],
+  },
   {
     version: 'v0.3',
     date: 'March 16, 2026',
@@ -155,7 +244,7 @@ export function WhatsNewDialog() {
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
+        <ScrollArea className="flex-1 min-h-0 -mx-6 px-6 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 10rem)' }}>
           <div className="space-y-6 py-2">
             {CHANGELOG.map((group, gi) => (
               <div key={gi}>

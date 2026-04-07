@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { CurrencyInput } from "@/components/shared"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { AddTopupDialog } from "@/components/wallet"
+import { CURRENCY_CODE } from "@/lib/constants"
 import type { WalletData, VarianceData } from "./types"
 
 const OVERRIDE_REASONS = [
@@ -99,7 +100,7 @@ export function WalletSection({
             <Label htmlFor="walletOpening">Opening Balance</Label>
             <div className="flex items-center gap-2">
               <div className="flex-1 flex h-9 items-center rounded-md border bg-muted/40 px-3 font-mono text-sm">
-                {wallet.opening.toLocaleString()} MVR
+                {wallet.opening.toLocaleString()} {CURRENCY_CODE}
               </div>
               {!isReadOnly && (
                 <Button
@@ -108,6 +109,7 @@ export function WalletSection({
                   className="h-9 w-9 shrink-0"
                   onClick={openOverrideDialog}
                   title="Override opening balance"
+                  aria-label="Override opening balance"
                 >
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -123,7 +125,7 @@ export function WalletSection({
             <Label>Today&apos;s Top-ups</Label>
             <div className="flex items-center gap-2">
               <Input
-                value={`${totalTopups.toLocaleString()} MVR`}
+                value={`${totalTopups.toLocaleString()} ${CURRENCY_CODE}`}
                 disabled
                 className="font-mono"
               />
@@ -140,7 +142,7 @@ export function WalletSection({
             {dayTopups.map((t) => (
               <div key={t.id} className="flex items-center justify-between text-sm">
                 <div>
-                  <span className="font-mono font-medium">{Number(t.amount).toLocaleString()} MVR</span>
+                  <span className="font-mono font-medium">{Number(t.amount).toLocaleString()} {CURRENCY_CODE}</span>
                   {t.notes && (
                     <p className="text-xs text-muted-foreground mt-0.5">{t.notes}</p>
                   )}
@@ -204,7 +206,7 @@ export function WalletSection({
                 <p className="text-xs text-rose-700">
                   Add a top-up of at least{" "}
                   <span className="font-semibold">
-                    {Math.abs(variance.walletExpected).toLocaleString()} MVR
+                    {Math.abs(variance.walletExpected).toLocaleString()} {CURRENCY_CODE}
                   </span>{" "}
                   or reduce reload sales before submitting.
                 </p>
@@ -243,7 +245,7 @@ export function WalletSection({
               ) : (
                 <>
                   {variance.walletVariance > 0 ? "+" : ""}
-                  {variance.walletVariance.toLocaleString()} MVR
+                  {variance.walletVariance.toLocaleString()} {CURRENCY_CODE}
                   <AlertTriangle className="ml-auto h-4 w-4" />
                 </>
               )}

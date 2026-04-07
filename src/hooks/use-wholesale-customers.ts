@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react"
 import { useApiClient } from "./use-api-client"
 import type { WholesaleCustomerData, CreateWholesaleCustomerDto, WholesaleDiscountTierData } from "@/types"
 
-interface UseWholesaleCustomersReturn {
+export interface UseWholesaleCustomersReturn {
   customers: WholesaleCustomerData[]
   discountTiers: WholesaleDiscountTierData[]
   isLoading: boolean
@@ -39,6 +39,9 @@ export function useWholesaleCustomers(): UseWholesaleCustomersReturn {
         if (result.success && result.data) {
           setDiscountTiers(result.data)
         }
+      })
+      .catch((error) => {
+        console.error("Failed to fetch wholesale discount tiers:", error)
       })
   }, [api])
 

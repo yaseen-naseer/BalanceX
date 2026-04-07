@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useApiClient } from '@/hooks/use-api-client'
 import { Header } from '@/components/layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -23,6 +24,7 @@ import {
 } from '@/components/settings'
 
 export default function SettingsPage() {
+  const api = useApiClient()
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<User[]>([])
   const [isLoadingUsers, setIsLoadingUsers] = useState(true)
@@ -35,23 +37,26 @@ export default function SettingsPage() {
   const isOwner = currentUser?.role === 'OWNER'
 
   const fetchUsers = useCallback(async () => {
-    if (!isOwner) {
+    if (currentUser?.role !== 'OWNER') {
       setIsLoadingUsers(false)
       return
     }
 
     try {
-      const response = await fetch('/api/users')
-      if (response.ok) {
-        const data = await response.json()
-        setUsers(data)
+      const result = await api.get<User[]>('/api/users')
+      if (result.success && result.data) {
+        setUsers(result.data)
+      } else {
+        toast.error(result.error || 'Failed to load users')
       }
     } catch (error) {
       console.error('Error fetching users:', error)
+      toast.error('Failed to load users')
     } finally {
       setIsLoadingUsers(false)
     }
-  }, [isOwner])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     fetchUsers()
@@ -65,20 +70,15 @@ export default function SettingsPage() {
 
     setIsSubmitting(true)
     try {
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
+      const result = await api.post('/api/users', formData)
 
-      if (response.ok) {
+      if (result.success) {
         toast.success('User created successfully')
         setShowAddDialog(false)
         setFormData(initialFormData)
         fetchUsers()
       } else {
-        const data = await response.json()
-        toast.error(data.error || 'Failed to create user')
+        toast.error(result.error || 'Failed to create user')
       }
     } catch {
       toast.error('Failed to create user')
@@ -101,21 +101,16 @@ export default function SettingsPage() {
         updateData.password = formData.password
       }
 
-      const response = await fetch(`/api/users/${editingUser.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData),
-      })
+      const result = await api.put(`/api/users/${editingUser.id}`, updateData)
 
-      if (response.ok) {
+      if (result.success) {
         toast.success('User updated successfully')
         setShowEditDialog(false)
         setEditingUser(null)
         setFormData(initialFormData)
         fetchUsers()
       } else {
-        const data = await response.json()
-        toast.error(data.error || 'Failed to update user')
+        toast.error(result.error || 'Failed to update user')
       }
     } catch {
       toast.error('Failed to update user')
@@ -126,16 +121,12 @@ export default function SettingsPage() {
 
   const handleDeactivateUser = async (userId: string) => {
     try {
-      const response = await fetch(`/api/users/${userId}`, {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
+      const result = await api.delete(`/api/users/${userId}`)
+      if (result.success) {
         toast.success('User deactivated')
         fetchUsers()
       } else {
-        const data = await response.json()
-        toast.error(data.error || 'Failed to deactivate user')
+        toast.error(result.error || 'Failed to deactivate user')
       }
     } catch {
       toast.error('Failed to deactivate user')
@@ -144,17 +135,13 @@ export default function SettingsPage() {
 
   const handleReactivateUser = async (userId: string) => {
     try {
-      const response = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: true }),
-      })
+      const result = await api.put(`/api/users/${userId}`, { isActive: true })
 
-      if (response.ok) {
+      if (result.success) {
         toast.success('User reactivated')
         fetchUsers()
       } else {
-        toast.error('Failed to reactivate user')
+        toast.error(result.error || 'Failed to reactivate user')
       }
     } catch {
       toast.error('Failed to reactivate user')

@@ -1,6 +1,6 @@
 import type { NextAuthOptions, User } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { compare } from "bcryptjs"
+import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/db"
 import type { UserRole } from "@prisma/client"
 import { createAuditLog } from "@/lib/audit"
@@ -9,6 +9,9 @@ import { logError, logInfo } from "@/lib/logger"
 // Account lockout configuration
 const MAX_FAILED_ATTEMPTS = 5
 const LOCKOUT_DURATION_MINUTES = 15
+
+// S5: Dummy hash for constant-time comparison on auth failure paths (timing attack mitigation)
+const DUMMY_HASH = "$2a$12$x".padEnd(60, "0")
 
 // Extend the built-in types
 declare module "next-auth" {
@@ -49,6 +52,8 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials): Promise<User | null> {
         if (!credentials?.username || !credentials?.password) {
+          // S5: Constant-time — run bcrypt even when credentials missing to prevent timing attacks
+          await bcrypt.compare("dummy", DUMMY_HASH)
           return null
         }
 
@@ -58,6 +63,8 @@ export const authOptions: NextAuthOptions = {
           })
 
           if (!user || !user.isActive) {
+            // S5: Constant-time — run bcrypt even when user not found / inactive
+            await bcrypt.compare("dummy", DUMMY_HASH)
             return null
           }
 
@@ -65,13 +72,18 @@ export const authOptions: NextAuthOptions = {
           if (user.lockedUntil && user.lockedUntil > new Date()) {
             // Account is still locked
             logInfo("Account locked - login attempt rejected", { username: user.username })
+            // S5: Constant-time delay for locked accounts
+            await bcrypt.compare("dummy", DUMMY_HASH)
             return null
           }
 
-          // If lockout has expired, reset the counter
-          if (user.lockedUntil && user.lockedUntil <= new Date()) {
-            await prisma.user.update({
-              where: { id: user.id },
+          // S6: Atomic lockout reset — if lockout has expired, reset the counter atomically
+          if (user.lockedUntil) {
+            await prisma.user.updateMany({
+              where: {
+                id: user.id,
+                lockedUntil: { lte: new Date() },
+              },
               data: {
                 failedLoginAttempts: 0,
                 lockedUntil: null,
@@ -79,7 +91,7 @@ export const authOptions: NextAuthOptions = {
             })
           }
 
-          const isPasswordValid = await compare(credentials.password, user.passwordHash)
+          const isPasswordValid = await bcrypt.compare(credentials.password, user.passwordHash)
 
           if (!isPasswordValid) {
             // Increment failed attempts
@@ -145,7 +157,20 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
+    maxAge: 8 * 60 * 60, // 8 hours (S4: reduced from 24h for financial app)
+  },
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === "production"
+        ? "__Secure-next-auth.session-token"
+        : "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax" as const,
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
   },
   callbacks: {
     async jwt({ token, user }) {

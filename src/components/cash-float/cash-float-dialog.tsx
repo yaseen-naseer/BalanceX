@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useApiClient } from "@/hooks/use-api-client"
 import {
   Dialog,
   DialogContent,
@@ -82,6 +83,7 @@ export function CashFloatDialog({
   cashExpected = 0,
   onSuccess,
 }: CashFloatDialogProps) {
+  const api = useApiClient()
   const [isLoading, setIsLoading] = useState(false)
   const [floatSettings, setFloatSettings] = useState<FloatSetting[]>([])
   const [shiftSettings, setShiftSettings] = useState<ShiftSetting[]>([])
@@ -129,31 +131,26 @@ export function CashFloatDialog({
 
   const loadSettings = async () => {
     try {
-      // Load float settings
-      const floatRes = await fetch("/api/cash-float-settings")
-      if (floatRes.ok) {
-        const floatData = await floatRes.json()
-        setFloatSettings(floatData.data || [])
-        // Select default
-        const defaultFloat = floatData.data?.find((f: FloatSetting) => f.isDefault)
+      const floatResult = await api.get<FloatSetting[]>("/api/cash-float-settings")
+      if (floatResult.data) {
+        setFloatSettings(floatResult.data)
+        const defaultFloat = floatResult.data.find((f) => f.isDefault)
         if (defaultFloat && !existingFloat) {
           setSelectedFloatId(defaultFloat.id)
         }
       }
 
-      // Load shift settings
-      const shiftRes = await fetch("/api/shift-settings")
-      if (shiftRes.ok) {
-        const shiftData = await shiftRes.json()
-        setShiftSettings(shiftData.data || [])
-        // Select default
-        const defaultShift = shiftData.data?.find((s: ShiftSetting) => s.isDefault)
+      const shiftResult = await api.get<ShiftSetting[]>("/api/shift-settings")
+      if (shiftResult.data) {
+        setShiftSettings(shiftResult.data)
+        const defaultShift = shiftResult.data.find((s) => s.isDefault)
         if (defaultShift && !existingFloat) {
           setSelectedShiftId(defaultShift.id)
         }
       }
     } catch (error) {
       console.error("Error loading settings:", error)
+      toast.error("Failed to load cash float settings")
     }
   }
 
@@ -181,58 +178,38 @@ export function CashFloatDialog({
       })
 
       if (type === "opening") {
-        // Create new cash float
-        const createRes = await fetch("/api/cash-float", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            dailyEntryId,
-            selectedFloatId,
-            shiftId: selectedShiftId,
-          }),
+        const createResult = await api.post<{ id: string }>("/api/cash-float", {
+          dailyEntryId,
+          selectedFloatId,
+          shiftId: selectedShiftId,
         })
 
-        if (!createRes.ok) {
-          const error = await createRes.json()
-          throw new Error(error.error || "Failed to create cash float")
+        if (!createResult.success) {
+          throw new Error(createResult.error || "Failed to create cash float")
         }
 
-        const createData = await createRes.json()
-
-        // Update with opening counts
-        const updateRes = await fetch("/api/cash-float", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: createData.data.id,
-            type: "opening",
-            ...denomData,
-            verified,
-            notes,
-          }),
+        const updateResult = await api.patch("/api/cash-float", {
+          id: createResult.data!.id,
+          type: "opening",
+          ...denomData,
+          verified,
+          notes,
         })
 
-        if (!updateRes.ok) {
-          const error = await updateRes.json()
-          throw new Error(error.error || "Failed to update opening float")
+        if (!updateResult.success) {
+          throw new Error(updateResult.error || "Failed to update opening float")
         }
       } else {
-        // Update closing counts
-        const updateRes = await fetch("/api/cash-float", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: existingFloat?.id,
-            type: "closing",
-            ...denomData,
-            verified,
-            notes,
-          }),
+        const updateResult = await api.patch("/api/cash-float", {
+          id: existingFloat?.id,
+          type: "closing",
+          ...denomData,
+          verified,
+          notes,
         })
 
-        if (!updateRes.ok) {
-          const error = await updateRes.json()
-          throw new Error(error.error || "Failed to update closing float")
+        if (!updateResult.success) {
+          throw new Error(updateResult.error || "Failed to update closing float")
         }
       }
 

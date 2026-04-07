@@ -5,21 +5,20 @@ import prisma from "@/lib/db"
 import bcrypt from "bcryptjs"
 import { createUserSchema, validateRequestBody } from "@/lib/validations"
 import { logError } from "@/lib/logger"
+import { BCRYPT_ROUNDS } from "@/lib/constants"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { ApiErrors } from "@/lib/api-response"
 
 // GET - List all users (Owner only)
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     if (session.user.role !== "OWNER") {
-      return NextResponse.json(
-        { error: "Only Owner can view all users" },
-        { status: 403 }
-      )
+      return ApiErrors.forbidden("Only Owner can view all users")
     }
 
     const users = await prisma.user.findMany({
@@ -38,10 +37,7 @@ export async function GET() {
     return NextResponse.json(users)
   } catch (error) {
     logError("Error fetching users", error)
-    return NextResponse.json(
-      { error: "Failed to fetch users" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch users")
   }
 }
 
@@ -50,14 +46,11 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     if (session.user.role !== "OWNER") {
-      return NextResponse.json(
-        { error: "Only Owner can create users" },
-        { status: 403 }
-      )
+      return ApiErrors.forbidden("Only Owner can create users")
     }
 
     // Validate request body
@@ -71,14 +64,11 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: "Username already exists" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Username already exists")
     }
 
     // Hash password
-    const passwordHash = await bcrypt.hash(password, 10)
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
 
     const user = await prisma.user.create({
       data: {
@@ -111,9 +101,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(user, { status: 201 })
   } catch (error) {
     logError("Error creating user", error)
-    return NextResponse.json(
-      { error: "Failed to create user" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to create user")
   }
 }

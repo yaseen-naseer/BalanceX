@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from "@/lib/api-auth"
 import { createWholesaleCustomerSchema, validateRequestBody } from "@/lib/validations"
 import { successResponse, paginatedResponse, ApiErrors } from "@/lib/api-response"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { logError } from "@/lib/logger"
 
 // GET /api/wholesale-customers - List/search wholesale customers
 export async function GET(request: NextRequest) {
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
   if (!auth.authenticated) return auth.error!
 
   const { searchParams } = new URL(request.url)
-  const search = searchParams.get("search") || ""
+  const search = (searchParams.get("search") || "").slice(0, 100).trim()
   const activeOnly = searchParams.get("activeOnly") !== "false"
   const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100)
   const offset = parseInt(searchParams.get("offset") || "0")
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
 
     return paginatedResponse(data, { total, limit, offset })
   } catch (error) {
-    console.error("Error fetching wholesale customers:", error)
+    logError("Error fetching wholesale customers", error)
     return ApiErrors.serverError("Failed to fetch wholesale customers")
   }
 }
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
       201
     )
   } catch (error) {
-    console.error("Error creating wholesale customer:", error)
+    logError("Error creating wholesale customer", error)
     return ApiErrors.serverError("Failed to create wholesale customer")
   }
 }

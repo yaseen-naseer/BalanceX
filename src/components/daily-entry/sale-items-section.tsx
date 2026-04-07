@@ -4,20 +4,11 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ChevronDown, ChevronUp, List, Trash2, Pencil } from "lucide-react"
 import { format } from "date-fns"
-import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { DeleteLineItemDialog } from "./delete-line-item-dialog"
+import { EditLineItemDialog } from "./edit-line-item-dialog"
 import type { SaleLineItemData } from "@/types"
 import { CATEGORIES, CUSTOMER_TYPES, PAYMENT_METHODS } from "./types"
 
@@ -42,22 +33,6 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   TRANSFER: "Transfer",
 }
 
-const DELETE_REASONS = [
-  "Wrong amount entered",
-  "Duplicate entry",
-  "Wrong category selected",
-  "Wrong customer type",
-  "Wrong payment method",
-  "Sale was cancelled/reversed",
-] as const
-
-const EDIT_REASONS = [
-  "Correcting amount",
-  "Correcting service number",
-  "Adding missing details",
-  "Customer correction",
-] as const
-
 interface CellGroup {
   key: string
   category: string
@@ -75,21 +50,8 @@ export function SaleItemsSection({
 }: SaleItemsSectionProps) {
   const [expanded, setExpanded] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-
-  // Delete state
   const [pendingDelete, setPendingDelete] = useState<SaleLineItemData | null>(null)
-  const [deleteReason, setDeleteReason] = useState("")
-  const [deleteCustomReason, setDeleteCustomReason] = useState("")
-  const [isDeleting, setIsDeleting] = useState(false)
-
-  // Edit state
   const [pendingEdit, setPendingEdit] = useState<SaleLineItemData | null>(null)
-  const [editAmount, setEditAmount] = useState("")
-  const [editServiceNumber, setEditServiceNumber] = useState("")
-  const [editNote, setEditNote] = useState("")
-  const [editReason, setEditReason] = useState("")
-  const [editCustomReason, setEditCustomReason] = useState("")
-  const [isEditing, setIsEditing] = useState(false)
 
   if (isLoading || lineItems.length === 0) return null
 
@@ -127,67 +89,6 @@ export function SaleItemsSection({
     })
   }
 
-  // Delete handlers
-  const finalDeleteReason = deleteReason === "Other" ? deleteCustomReason.trim() : deleteReason
-
-  const handleConfirmDelete = async () => {
-    if (!pendingDelete || !finalDeleteReason) return
-    setIsDeleting(true)
-    try {
-      const result = await onDeleteLineItem(pendingDelete.id, finalDeleteReason)
-      if (result.success) {
-        toast.success("Sale item removed")
-        setPendingDelete(null)
-        setDeleteReason("")
-        setDeleteCustomReason("")
-      } else {
-        toast.error("Failed to remove sale item")
-      }
-    } finally {
-      setIsDeleting(false)
-    }
-  }
-
-  // Edit handlers
-  const finalEditReason = editReason === "Other" ? editCustomReason.trim() : editReason
-
-  const openEditDialog = (item: SaleLineItemData) => {
-    setPendingEdit(item)
-    setEditAmount(Number(item.amount).toString())
-    setEditServiceNumber(item.serviceNumber || "")
-    setEditNote(item.note || "")
-    setEditReason("")
-    setEditCustomReason("")
-  }
-
-  const handleConfirmEdit = async () => {
-    if (!pendingEdit || !finalEditReason) return
-
-    const newAmount = parseFloat(editAmount)
-    if (!newAmount || newAmount <= 0) {
-      toast.error("Enter a valid amount")
-      return
-    }
-
-    setIsEditing(true)
-    try {
-      const result = await onEditLineItem(pendingEdit.id, {
-        amount: newAmount,
-        serviceNumber: editServiceNumber || null,
-        note: editNote || null,
-        reason: finalEditReason,
-      })
-      if (result.success) {
-        toast.success("Sale item updated")
-        setPendingEdit(null)
-      } else {
-        toast.error("Failed to update sale item")
-      }
-    } finally {
-      setIsEditing(false)
-    }
-  }
-
   return (
     <Card>
       <CardHeader
@@ -202,7 +103,7 @@ export function SaleItemsSection({
               {lineItems.length}
             </Badge>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" asChild aria-label={expanded ? "Collapse sale items" : "Expand sale items"}>
             <span>
               {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </span>
@@ -296,21 +197,19 @@ export function SaleItemsSection({
                             <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
-                                onClick={() => openEditDialog(item)}
+                                onClick={() => setPendingEdit(item)}
                                 className="text-muted-foreground hover:text-primary transition-colors"
                                 title="Edit item"
+                                aria-label="Edit item"
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setPendingDelete(item)
-                                  setDeleteReason("")
-                                  setDeleteCustomReason("")
-                                }}
+                                onClick={() => setPendingDelete(item)}
                                 className="text-destructive/60 hover:text-destructive transition-colors"
                                 title="Remove item"
+                                aria-label="Remove item"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
@@ -326,142 +225,17 @@ export function SaleItemsSection({
         </CardContent>
       )}
 
-      {/* Delete Confirmation */}
-      <ConfirmDialog
-        open={!!pendingDelete}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPendingDelete(null)
-            setDeleteReason("")
-            setDeleteCustomReason("")
-          }
-        }}
-        title="Remove Sale Item?"
-        description={
-          pendingDelete
-            ? `Remove the ${Number(pendingDelete.amount).toLocaleString()} MVR sale${pendingDelete.serviceNumber ? ` (#${pendingDelete.serviceNumber})` : ""}?`
-            : ""
-        }
-        confirmLabel="Remove"
-        variant="destructive"
-        onConfirm={handleConfirmDelete}
-        isLoading={isDeleting}
-        loadingText="Removing..."
-        disableConfirm={!finalDeleteReason}
-      >
-        <div className="space-y-3">
-          <Label>Reason for removal *</Label>
-          <Select
-            value={deleteReason}
-            onValueChange={(v) => {
-              setDeleteReason(v)
-              if (v !== "Other") setDeleteCustomReason("")
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a reason..." />
-            </SelectTrigger>
-            <SelectContent>
-              {DELETE_REASONS.map((reason) => (
-                <SelectItem key={reason} value={reason}>{reason}</SelectItem>
-              ))}
-              <SelectItem value="Other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-          {deleteReason === "Other" && (
-            <Input
-              placeholder="Enter reason..."
-              value={deleteCustomReason}
-              onChange={(e) => setDeleteCustomReason(e.target.value)}
-              autoFocus
-            />
-          )}
-        </div>
-      </ConfirmDialog>
+      <DeleteLineItemDialog
+        item={pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onDelete={onDeleteLineItem}
+      />
 
-      {/* Edit Dialog */}
-      <ConfirmDialog
-        open={!!pendingEdit}
-        onOpenChange={(open) => {
-          if (!open) setPendingEdit(null)
-        }}
-        title="Edit Sale Item"
-        description={
-          pendingEdit
-            ? `Editing ${Number(pendingEdit.amount).toLocaleString()} MVR sale${pendingEdit.serviceNumber ? ` (#${pendingEdit.serviceNumber})` : ""}`
-            : ""
-        }
-        confirmLabel="Save Changes"
-        variant="default"
-        onConfirm={handleConfirmEdit}
-        isLoading={isEditing}
-        loadingText="Saving..."
-        disableConfirm={!finalEditReason || !editAmount || parseFloat(editAmount) <= 0}
-      >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Amount (MVR) *</Label>
-            <Input
-              type="text"
-              inputMode="decimal"
-              value={editAmount}
-              onChange={(e) => {
-                if (e.target.value === "" || /^\d*\.?\d*$/.test(e.target.value)) {
-                  setEditAmount(e.target.value)
-                }
-              }}
-              placeholder="0.00"
-              className="font-mono"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Service #</Label>
-            <Input
-              value={editServiceNumber}
-              onChange={(e) => setEditServiceNumber(e.target.value)}
-              placeholder="e.g. 77xxxxx"
-              maxLength={50}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Note</Label>
-            <Input
-              value={editNote}
-              onChange={(e) => setEditNote(e.target.value)}
-              placeholder="Optional note"
-              maxLength={500}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Reason for editing *</Label>
-            <Select
-              value={editReason}
-              onValueChange={(v) => {
-                setEditReason(v)
-                if (v !== "Other") setEditCustomReason("")
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a reason..." />
-              </SelectTrigger>
-              <SelectContent>
-                {EDIT_REASONS.map((reason) => (
-                  <SelectItem key={reason} value={reason}>{reason}</SelectItem>
-                ))}
-                <SelectItem value="Other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-            {editReason === "Other" && (
-              <Input
-                placeholder="Enter reason..."
-                value={editCustomReason}
-                onChange={(e) => setEditCustomReason(e.target.value)}
-                autoFocus
-              />
-            )}
-          </div>
-        </div>
-      </ConfirmDialog>
+      <EditLineItemDialog
+        item={pendingEdit}
+        onClose={() => setPendingEdit(null)}
+        onEdit={onEditLineItem}
+      />
     </Card>
   )
 }

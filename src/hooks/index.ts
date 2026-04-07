@@ -17,6 +17,8 @@ export { useCreditCustomers } from "./use-credit-customers"
 export { useDashboard } from "./use-dashboard"
 export { useBank } from "./use-bank"
 export { useWallet } from "./use-wallet"
+export { useWholesaleCustomers } from "./use-wholesale-customers"
+export type { UseWholesaleCustomersReturn } from "./use-wholesale-customers"
 export { useReports } from "./use-reports"
 export type {
   DailyBreakdown,

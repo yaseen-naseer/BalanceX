@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/db"
 import { z } from "zod"
 import { validateRequestBody } from "@/lib/validations"
+import { ApiErrors } from "@/lib/api-response"
+import { logError } from "@/lib/logger"
 
 const verifyScreenshotSchema = z.object({
   screenshotId: z.string().cuid("Invalid screenshot ID"),
@@ -16,15 +18,12 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     // Only Owner and Accountant can verify screenshots
     if (session.user.role === "SALES") {
-      return NextResponse.json(
-        { error: "Only Owner and Accountant can verify screenshots" },
-        { status: 403 }
-      )
+      return ApiErrors.forbidden("Only Owner and Accountant can verify screenshots")
     }
 
     // Validate request body
@@ -44,10 +43,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(screenshot)
   } catch (error) {
-    console.error("Error verifying screenshot:", error)
-    return NextResponse.json(
-      { error: "Failed to verify screenshot" },
-      { status: 500 }
-    )
+    logError("Error verifying screenshot", error)
+    return ApiErrors.serverError("Failed to verify screenshot")
   }
 }

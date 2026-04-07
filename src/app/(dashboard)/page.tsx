@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useDashboard } from '@/hooks/use-dashboard'
+import { CURRENCY_CODE } from '@/lib/constants'
 import {
   StatCard,
   AlertsSection,
@@ -30,7 +31,7 @@ export default function DashboardPage() {
   const isLimitedView = data?.limitedView ?? false
 
   const formatCurrency = (amount: number | null | undefined) =>
-    amount != null ? `${amount.toLocaleString()} MVR` : '—'
+    amount != null ? `${amount.toLocaleString()} ${CURRENCY_CODE}` : '—'
 
   return (
     <div className="flex flex-col">

@@ -2,24 +2,24 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/db"
+import { ApiErrors, errorResponse } from "@/lib/api-response"
 import { writeFile, mkdir, unlink } from "fs/promises"
-import { join } from "path"
+import { join, resolve } from "path"
 import { existsSync } from "fs"
+import { randomBytes } from "crypto"
+import { logError } from "@/lib/logger"
 
 // POST - Upload a screenshot for a specific date
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     // Only Owner and Accountant can upload screenshots
     if (session.user.role === "SALES") {
-      return NextResponse.json(
-        { error: "Only Owner and Accountant can upload screenshots" },
-        { status: 403 }
-      )
+      return ApiErrors.forbidden("Only Owner and Accountant can upload screenshots")
     }
 
     // Verify user exists in database (handles stale sessions after db:clean)
@@ -29,10 +29,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!userExists) {
-      return NextResponse.json(
-        { error: "Session expired. Please logout and login again." },
-        { status: 401 }
-      )
+      return ApiErrors.sessionExpired()
     }
 
     const formData = await request.formData()
@@ -40,29 +37,20 @@ export async function POST(request: NextRequest) {
     const date = formData.get("date") as string | null
 
     if (!file || !date) {
-      return NextResponse.json(
-        { error: "File and date are required" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("File and date are required")
     }
 
     // Validate file type by MIME type
     const validMimeTypes = ["image/jpeg", "image/jpg", "image/png"]
     if (!validMimeTypes.includes(file.type)) {
-      return NextResponse.json(
-        { error: "Only JPG and PNG files are allowed" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Only JPG and PNG files are allowed")
     }
 
     // Validate and sanitize file extension - SECURITY FIX
     const allowedExtensions = ["jpg", "jpeg", "png"]
     const rawExt = file.name.split(".").pop()?.toLowerCase()
     if (!rawExt || !allowedExtensions.includes(rawExt)) {
-      return NextResponse.json(
-        { error: "Invalid file extension. Only jpg, jpeg, and png allowed" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Invalid file extension. Only jpg, jpeg, and png allowed")
     }
     // Use validated extension
     const ext = rawExt
@@ -70,28 +58,19 @@ export async function POST(request: NextRequest) {
     // Validate file size (max 10MB)
     const maxSize = 10 * 1024 * 1024
     if (file.size > maxSize) {
-      return NextResponse.json(
-        { error: "File size must be less than 10MB" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("File size must be less than 10MB")
     }
 
     // Validate date format to prevent path traversal - SECURITY FIX
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/
     if (!dateRegex.test(date)) {
-      return NextResponse.json(
-        { error: "Invalid date format. Expected YYYY-MM-DD" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Invalid date format. Expected YYYY-MM-DD")
     }
 
     // Validate it's an actual valid date
     const parsedDate = new Date(date)
     if (isNaN(parsedDate.getTime())) {
-      return NextResponse.json(
-        { error: "Invalid date" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Invalid date")
     }
 
     // Get daily entry for this date
@@ -101,10 +80,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!dailyEntry) {
-      return NextResponse.json(
-        { error: "No daily entry found for this date" },
-        { status: 404 }
-      )
+      return errorResponse("No daily entry found for this date", 404)
     }
 
     // Create uploads directory if it doesn't exist
@@ -113,10 +89,16 @@ export async function POST(request: NextRequest) {
       await mkdir(uploadsDir, { recursive: true })
     }
 
-    // Generate unique filename using sanitized date and validated extension
-    // SECURITY: Uses only validated date format and whitelisted extension
-    const filename = `${date}-${Date.now()}.${ext}`
+    // S13: Generate unpredictable filename using crypto random bytes
+    const filename = `${date}-${randomBytes(16).toString("hex")}.${ext}`
     const filepath = join(uploadsDir, filename)
+
+    // S13: Validate resolved path stays within uploads directory
+    const resolvedPath = resolve(filepath)
+    const resolvedUploadsDir = resolve(uploadsDir)
+    if (!resolvedPath.startsWith(resolvedUploadsDir)) {
+      return ApiErrors.badRequest("Invalid file path")
+    }
 
     // Save file to disk
     const bytes = await file.arrayBuffer()
@@ -144,11 +126,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(screenshot, { status: 201 })
   } catch (error) {
-    console.error("Error uploading screenshot:", error)
-    return NextResponse.json(
-      { error: "Failed to upload screenshot" },
-      { status: 500 }
-    )
+    logError("Error uploading screenshot", error)
+    return ApiErrors.serverError("Failed to upload screenshot")
   }
 }
 
@@ -157,20 +136,20 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date")
 
     if (!date) {
-      return NextResponse.json({ error: "Date is required" }, { status: 400 })
+      return ApiErrors.badRequest("Date is required")
     }
 
     // Validate date
     const parsedDate = new Date(date)
     if (isNaN(parsedDate.getTime())) {
-      return NextResponse.json({ error: "Invalid date format" }, { status: 400 })
+      return ApiErrors.badRequest("Invalid date format")
     }
 
     const dailyEntry = await prisma.dailyEntry.findUnique({
@@ -187,10 +166,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!dailyEntry) {
-      return NextResponse.json(
-        { error: "No daily entry found for this date" },
-        { status: 404 }
-      )
+      return errorResponse("No daily entry found for this date", 404)
     }
 
     const screenshot = dailyEntry.screenshot
@@ -208,11 +184,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(screenshot)
   } catch (error) {
-    console.error("Error fetching screenshot:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch screenshot" },
-      { status: 500 }
-    )
+    logError("Error fetching screenshot", error)
+    return ApiErrors.serverError("Failed to fetch screenshot")
   }
 }
 
@@ -221,25 +194,19 @@ export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     // Only Owner can delete screenshots
     if (session.user.role !== "OWNER") {
-      return NextResponse.json(
-        { error: "Only Owner can delete screenshots" },
-        { status: 403 }
-      )
+      return ApiErrors.forbidden("Only Owner can delete screenshots")
     }
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
     if (!id) {
-      return NextResponse.json(
-        { error: "Screenshot ID is required" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Screenshot ID is required")
     }
 
     // Find the screenshot
@@ -248,19 +215,21 @@ export async function DELETE(request: NextRequest) {
     })
 
     if (!screenshot) {
-      return NextResponse.json(
-        { error: "Screenshot not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Screenshot")
     }
 
-    // Delete the file from disk
+    // Delete the file from disk — validate path stays within public directory
     const filepath = join(process.cwd(), "public", screenshot.filepath)
+    const resolvedFilepath = resolve(filepath)
+    const publicDir = resolve(join(process.cwd(), "public"))
+    if (!resolvedFilepath.startsWith(publicDir)) {
+      return ApiErrors.badRequest("Invalid file path")
+    }
     if (existsSync(filepath)) {
       try {
         await unlink(filepath)
       } catch (err) {
-        console.error("Error deleting file:", err)
+        logError("Error deleting file", err)
         // Continue with database deletion even if file deletion fails
       }
     }
@@ -272,10 +241,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deleting screenshot:", error)
-    return NextResponse.json(
-      { error: "Failed to delete screenshot" },
-      { status: 500 }
-    )
+    logError("Error deleting screenshot", error)
+    return ApiErrors.serverError("Failed to delete screenshot")
   }
 }

@@ -45,7 +45,7 @@ export function EditTransactionDialog({ transaction, onUpdate }: EditTransaction
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
+        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" aria-label="Edit transaction">
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>

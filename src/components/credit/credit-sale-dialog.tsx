@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { useApiClient } from '@/hooks/use-api-client'
 import {
   Select,
   SelectContent,
@@ -44,6 +45,7 @@ interface CreditSaleDialogProps {
 }
 
 export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disabled }: CreditSaleDialogProps) {
+  const api = useApiClient()
   const { isOwner } = useAuth()
   const wholesale = useWholesaleCustomers()
   const [open, setOpen] = useState(false)
@@ -86,13 +88,13 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
   const fetchCustomers = async () => {
     setIsLoadingCustomers(true)
     try {
-      const response = await fetch('/api/credit-customers')
-      const data = await response.json()
-      if (data.success) {
-        setCustomers(data.data.filter((c: CreditCustomerWithBalance) => c.isActive))
+      const result = await api.get<CreditCustomerWithBalance[]>('/api/credit-customers')
+      if (result.success && result.data) {
+        setCustomers(result.data.filter((c) => c.isActive))
       }
     } catch (error) {
       console.error('Error fetching customers:', error)
+      toast.error('Failed to load credit customers')
     } finally {
       setIsLoadingCustomers(false)
     }
@@ -100,17 +102,11 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
 
   const handleCreateCustomer = async (data: CreateCreditCustomerDto) => {
     try {
-      const response = await fetch('/api/credit-customers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      const result = await response.json()
+      const result = await api.post<CreditCustomerWithBalance>('/api/credit-customers', data)
       if (result.success) {
         toast.success(`Customer "${data.name}" created`)
         await fetchCustomers()
-        // Auto-select the newly created customer
-        setSelectedCustomer(result.data)
+        if (result.data) setSelectedCustomer(result.data)
       } else {
         toast.error(result.error || 'Failed to create customer')
       }
@@ -244,32 +240,27 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
         body.customerType = selectedCustomer!.type
       }
 
-      const response = await fetch('/api/credit-sales', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
+      const result = await api.post<Record<string, unknown>>('/api/credit-sales', body)
 
-      const data = await response.json()
-
-      if (data.success) {
-        if (data.limitOverridden) {
+      const resAny = result as unknown as Record<string, unknown>
+      if (result.success) {
+        if (resAny.limitOverridden) {
           toast.success(`Credit sale approved with limit override`, {
-            description: data.warning,
+            description: resAny.warning as string,
           })
-        } else if (data.warning) {
-          toast.warning(data.warning)
+        } else if (resAny.warning) {
+          toast.warning(resAny.warning as string)
         } else {
           toast.success(`Credit sale added for ${customerName}`)
         }
         handleOpenChange(false)
         onSaleAdded()
-      } else if (data.requiresOwnerApproval) {
+      } else if (resAny.requiresOwnerApproval) {
         toast.error('Credit limit exceeded', {
           description: 'Only the Owner can approve sales that exceed credit limits.',
         })
       } else {
-        toast.error(data.error || 'Failed to add credit sale')
+        toast.error(result.error || 'Failed to add credit sale')
       }
     } catch (_error) {
       toast.error('Failed to add credit sale')

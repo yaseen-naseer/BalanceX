@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Wallet, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { WALLET_VARIANCE_THRESHOLD } from '@/lib/constants'
 import type { DailyEntryWithRelations } from '@/types'
 
 export interface TodayActivityCardProps {
@@ -108,7 +109,7 @@ export function TodayActivityCard({
                 'flex justify-between items-center p-2 rounded-lg',
                 todayEntry.wallet.variance === 0
                   ? 'bg-emerald-50'
-                  : Math.abs(Number(todayEntry.wallet.variance)) > 500
+                  : Math.abs(Number(todayEntry.wallet.variance)) > WALLET_VARIANCE_THRESHOLD
                     ? 'bg-rose-50'
                     : 'bg-amber-50'
               )}
@@ -120,7 +121,7 @@ export function TodayActivityCard({
                   <AlertTriangle
                     className={cn(
                       'h-4 w-4',
-                      Math.abs(Number(todayEntry.wallet.variance)) > 500
+                      Math.abs(Number(todayEntry.wallet.variance)) > WALLET_VARIANCE_THRESHOLD
                         ? 'text-rose-600'
                         : 'text-amber-600'
                     )}

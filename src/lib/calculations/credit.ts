@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db"
+import type { TxClient } from "@/lib/utils/atomic"
 
 export interface CustomerOutstanding {
   customerId: string
@@ -21,58 +22,58 @@ export interface CreditSummary {
 }
 
 export async function calculateCustomerOutstanding(
-  customerId: string
+  customerId: string,
+  tx?: TxClient
 ): Promise<number> {
-  const transactions = await prisma.creditTransaction.findMany({
+  const db = tx ?? prisma
+  const transactions = await db.creditTransaction.findMany({
     where: { customerId },
   })
 
-  return transactions.reduce((sum, tx) => {
-    if (tx.type === "CREDIT_SALE") {
-      return sum + Number(tx.amount)
+  // D11: Use .toNumber() — idiomatic for Prisma Decimal; safe for MVR amounts < 1M
+  return transactions.reduce((sum, txn) => {
+    if (txn.type === "CREDIT_SALE") {
+      return sum + txn.amount.toNumber()
     } else {
-      return sum - Number(tx.amount)
+      return sum - txn.amount.toNumber()
     }
   }, 0)
 }
 
 export async function getAllCustomerOutstandings(): Promise<CustomerOutstanding[]> {
+  // D2: Include transactions in initial query to eliminate N+1
   const customers = await prisma.creditCustomer.findMany({
     where: { isActive: true },
+    include: {
+      transactions: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
   })
 
-  const results: CustomerOutstanding[] = []
-
-  for (const customer of customers) {
-    const transactions = await prisma.creditTransaction.findMany({
-      where: { customerId: customer.id },
-      orderBy: { createdAt: "desc" },
-    })
-
-    const outstanding = transactions.reduce((sum, tx) => {
+  return customers.map((customer) => {
+    const outstanding = customer.transactions.reduce((sum, tx) => {
       if (tx.type === "CREDIT_SALE") {
-        return sum + Number(tx.amount)
+        return sum + tx.amount.toNumber()
       } else {
-        return sum - Number(tx.amount)
+        return sum - tx.amount.toNumber()
       }
     }, 0)
 
-    const creditLimit = customer.creditLimit ? Number(customer.creditLimit) : null
+    const creditLimit = customer.creditLimit ? customer.creditLimit.toNumber() : null
     const limitUsedPercentage =
       creditLimit && creditLimit > 0 ? (outstanding / creditLimit) * 100 : null
 
-    results.push({
+    return {
       customerId: customer.id,
       customerName: customer.name,
       customerType: customer.type,
       outstanding,
       creditLimit,
       limitUsedPercentage,
-      lastActivityDate: transactions[0]?.date || null,
-    })
-  }
-
-  return results
+      lastActivityDate: customer.transactions[0]?.date || null,
+    }
+  })
 }
 
 export async function getCreditSummary(): Promise<CreditSummary> {
@@ -144,7 +145,7 @@ export async function checkCreditLimit(
 
   const currentOutstanding = await calculateCustomerOutstanding(customerId)
   const newTotal = currentOutstanding + newAmount
-  const creditLimit = customer.creditLimit ? Number(customer.creditLimit) : null
+  const creditLimit = customer.creditLimit ? customer.creditLimit.toNumber() : null
 
   if (!creditLimit) {
     return {

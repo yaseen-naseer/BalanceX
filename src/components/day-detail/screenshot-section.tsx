@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { useApiClient } from '@/hooks/use-api-client'
 import Image from 'next/image'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -35,6 +36,7 @@ export interface ScreenshotSectionProps {
 }
 
 export function ScreenshotSection({ currentDate, canUpload, isOwner }: ScreenshotSectionProps) {
+  const api = useApiClient()
   const [screenshot, setScreenshot] = useState<ScreenshotData | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
@@ -45,20 +47,21 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
 
   const fetchScreenshot = useCallback(async () => {
     try {
-      const response = await fetch(`/api/screenshots?date=${currentDate}`)
-      if (response.ok) {
-        const data = await response.json()
-        setScreenshot(data)
-        setIsVerified(data?.isVerified || false)
-        setVerifyNotes(data?.verifyNotes || '')
-      } else if (response.status === 404) {
+      const result = await api.get<ScreenshotData>('/api/screenshots', { params: { date: currentDate } })
+      if (result.success && result.data) {
+        setScreenshot(result.data)
+        setIsVerified(result.data.isVerified || false)
+        setVerifyNotes(result.data.verifyNotes || '')
+      } else {
         setScreenshot(null)
         setIsVerified(false)
         setVerifyNotes('')
       }
     } catch (err) {
       console.error('Error fetching screenshot:', err)
+      toast.error('Failed to load screenshot')
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate])
 
   useEffect(() => {
@@ -109,17 +112,13 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
 
     setIsVerifying(true)
     try {
-      const response = await fetch('/api/screenshots/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          screenshotId: screenshot.id,
-          verified: isVerified,
-          notes: verifyNotes,
-        }),
+      const result = await api.post('/api/screenshots/verify', {
+        screenshotId: screenshot.id,
+        verified: isVerified,
+        notes: verifyNotes,
       })
 
-      if (response.ok) {
+      if (result.success) {
         toast.success(isVerified ? 'Screenshot verified' : 'Verification updated')
         fetchScreenshot()
       } else {
@@ -141,18 +140,14 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/screenshots?id=${screenshot.id}`, {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
+      const result = await api.delete('/api/screenshots', { params: { id: screenshot.id } })
+      if (result.success) {
         toast.success('Screenshot deleted')
         setScreenshot(null)
         setIsVerified(false)
         setVerifyNotes('')
       } else {
-        const data = await response.json()
-        toast.error(data.error || 'Failed to delete screenshot')
+        toast.error(result.error || 'Failed to delete screenshot')
       }
     } catch (_err) {
       toast.error('Failed to delete screenshot')
@@ -235,15 +230,15 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
 
 // Expose screenshot status for parent component
 export function useScreenshotStatus(currentDate: string) {
+  const api = useApiClient()
   const [screenshot, setScreenshot] = useState<ScreenshotData | null>(null)
 
   useEffect(() => {
     const fetchScreenshot = async () => {
       try {
-        const response = await fetch(`/api/screenshots?date=${currentDate}`)
-        if (response.ok) {
-          const data = await response.json()
-          setScreenshot(data)
+        const result = await api.get<ScreenshotData>('/api/screenshots', { params: { date: currentDate } })
+        if (result.success && result.data) {
+          setScreenshot(result.data)
         } else {
           setScreenshot(null)
         }
@@ -252,6 +247,7 @@ export function useScreenshotStatus(currentDate: string) {
       }
     }
     fetchScreenshot()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate])
 
   return {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useApiClient } from "@/hooks/use-api-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,6 +31,7 @@ interface CashFloatSettingsSectionProps {
 }
 
 export function CashFloatSettingsSection({ isOwner }: CashFloatSettingsSectionProps) {
+  const api = useApiClient()
   const [floats, setFloats] = useState<FloatSetting[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showDialog, setShowDialog] = useState(false)
@@ -43,11 +45,8 @@ export function CashFloatSettingsSection({ isOwner }: CashFloatSettingsSectionPr
 
   const fetchFloats = async () => {
     try {
-      const res = await fetch("/api/cash-float-settings")
-      if (res.ok) {
-        const data = await res.json()
-        setFloats(data.data || [])
-      }
+      const result = await api.get<FloatSetting[]>("/api/cash-float-settings")
+      setFloats(result.data || [])
     } catch (error) {
       console.error("Error fetching float settings:", error)
       toast.error("Failed to load float settings")
@@ -86,25 +85,20 @@ export function CashFloatSettingsSection({ isOwner }: CashFloatSettingsSectionPr
 
     setIsSubmitting(true)
     try {
-      const url = "/api/cash-float-settings"
-      const method = editingFloat ? "PATCH" : "POST"
       const body = editingFloat
         ? { id: editingFloat.id, name: formData.name, amount, isDefault: formData.isDefault }
         : { name: formData.name, amount, isDefault: formData.isDefault }
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
+      const result = editingFloat
+        ? await api.patch("/api/cash-float-settings", body)
+        : await api.post("/api/cash-float-settings", body)
 
-      if (res.ok) {
+      if (result.success) {
         toast.success(editingFloat ? "Float setting updated" : "Float setting created")
         setShowDialog(false)
         fetchFloats()
       } else {
-        const error = await res.json()
-        toast.error(error.error || "Failed to save float setting")
+        toast.error(result.error || "Failed to save float setting")
       }
     } catch (error) {
       console.error("Error saving float setting:", error)
@@ -118,11 +112,8 @@ export function CashFloatSettingsSection({ isOwner }: CashFloatSettingsSectionPr
     if (!confirm("Are you sure you want to delete this float setting?")) return
 
     try {
-      const res = await fetch(`/api/cash-float-settings?id=${id}`, {
-        method: "DELETE",
-      })
-
-      if (res.ok) {
+      const result = await api.delete("/api/cash-float-settings", { params: { id } })
+      if (result.success) {
         toast.success("Float setting deleted")
         fetchFloats()
       } else {
@@ -136,13 +127,8 @@ export function CashFloatSettingsSection({ isOwner }: CashFloatSettingsSectionPr
 
   const handleSetDefault = async (id: string) => {
     try {
-      const res = await fetch("/api/cash-float-settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, isDefault: true }),
-      })
-
-      if (res.ok) {
+      const result = await api.patch("/api/cash-float-settings", { id, isDefault: true })
+      if (result.success) {
         toast.success("Default float setting updated")
         fetchFloats()
       } else {

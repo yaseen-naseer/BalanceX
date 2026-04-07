@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import type { DashboardAlert } from '@/types'
 import { calculateReloadWalletCost } from '@/lib/utils/balance'
 import { getWholesaleReloadTotal } from '@/lib/utils/wholesale-reload'
+import { CASH_VARIANCE_THRESHOLD, WALLET_VARIANCE_THRESHOLD, CURRENCY_CODE } from '@/lib/constants'
 
 /**
  * Calculate revenue for a daily entry's categories
@@ -196,23 +197,30 @@ export async function generateAlerts(
   // Skip unsubmitted/screenshot checks on fresh setup with no entries yet
   const anyEntryExists = await prisma.dailyEntry.findFirst({ select: { id: true } })
 
-  for (const date of datesToCheck) {
-    if (!anyEntryExists) break
-    const entry = await prisma.dailyEntry.findUnique({
-      where: { date },
+  if (anyEntryExists && datesToCheck.length > 0) {
+    // B2: Batch query — fetch all entries for datesToCheck in a single findMany
+    const entries = await prisma.dailyEntry.findMany({
+      where: { date: { in: datesToCheck } },
       include: { screenshot: true },
     })
 
-    const dateStr = date.toISOString().split('T')[0]
+    const entryByDate = new Map(
+      entries.map((e) => [e.date.toISOString().split('T')[0], e])
+    )
 
-    if (!entry || entry.status !== 'SUBMITTED') {
-      unsubmittedDays.push(dateStr)
-    } else {
-      if (!isSalesUser) {
-        if (!entry.screenshot) {
-          missingScreenshotDays.push(dateStr)
-        } else if (!entry.screenshot.isVerified) {
-          unverifiedDays.push(dateStr)
+    for (const date of datesToCheck) {
+      const dateStr = date.toISOString().split('T')[0]
+      const entry = entryByDate.get(dateStr)
+
+      if (!entry || entry.status !== 'SUBMITTED') {
+        unsubmittedDays.push(dateStr)
+      } else {
+        if (!isSalesUser) {
+          if (!entry.screenshot) {
+            missingScreenshotDays.push(dateStr)
+          } else if (!entry.screenshot.isVerified) {
+            unverifiedDays.push(dateStr)
+          }
         }
       }
     }
@@ -267,22 +275,22 @@ export async function generateAlerts(
   for (const entry of varianceEntries) {
     const dateStr = entry.date.toISOString().split('T')[0]
 
-    if (entry.cashDrawer && Math.abs(Number(entry.cashDrawer.variance)) > 500) {
+    if (entry.cashDrawer && Math.abs(Number(entry.cashDrawer.variance)) > CASH_VARIANCE_THRESHOLD) {
       alerts.push({
         id: `cash_variance_${dateStr}`,
         type: 'cash_variance',
         priority: 'high',
-        message: `Cash variance > MVR 500 on ${dateStr}`,
+        message: `Cash variance > ${CURRENCY_CODE} ${CASH_VARIANCE_THRESHOLD} on ${dateStr}`,
         link: `/daily-entry?date=${dateStr}`,
       })
     }
 
-    if (entry.wallet && Math.abs(Number(entry.wallet.variance)) > 500) {
+    if (entry.wallet && Math.abs(Number(entry.wallet.variance)) > WALLET_VARIANCE_THRESHOLD) {
       alerts.push({
         id: `wallet_variance_${dateStr}`,
         type: 'wallet_variance',
         priority: 'high',
-        message: `Wallet variance > MVR 500 on ${dateStr}`,
+        message: `Wallet variance > ${CURRENCY_CODE} ${WALLET_VARIANCE_THRESHOLD} on ${dateStr}`,
         link: `/daily-entry?date=${dateStr}`,
       })
     }
@@ -293,21 +301,22 @@ export async function generateAlerts(
     const thirtyDaysAgo = new Date(today)
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
+    // D1: Include transactions in initial query to eliminate N+1
     const customers = await prisma.creditCustomer.findMany({
       where: { isActive: true },
+      include: {
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
     })
 
     let overdueCount = 0
     for (const customer of customers) {
-      const transactions = await prisma.creditTransaction.findMany({
-        where: { customerId: customer.id },
-        orderBy: { createdAt: 'desc' },
-      })
-
-      const outstanding = calculateCreditOutstanding(transactions)
+      const outstanding = calculateCreditOutstanding(customer.transactions)
 
       if (outstanding > 0) {
-        const lastActivity = transactions[0]?.date
+        const lastActivity = customer.transactions[0]?.date
         if (lastActivity && lastActivity < thirtyDaysAgo) {
           overdueCount++
         }
@@ -398,7 +407,7 @@ export async function getRecentActivity(isSalesUser: boolean = false): Promise<A
       id: tx.id,
       type: tx.type === 'CREDIT_SALE' ? 'credit_sale' : 'settlement',
       description: `${tx.type === 'CREDIT_SALE' ? 'Credit sale to' : 'Settlement from'} ${tx.customer.name}`,
-      amount: Number(tx.amount),
+      amount: tx.amount.toNumber(),
       date: tx.createdAt,
       user: tx.user.name,
     })

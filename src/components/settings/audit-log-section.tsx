@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { format } from "date-fns"
 import { ClipboardList, ChevronLeft, ChevronRight, X } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useApiClient } from "@/hooks/use-api-client"
 
 const LIMIT = 25
 
@@ -106,39 +107,40 @@ function renderDetails(details: unknown): string {
 }
 
 export function AuditLogSection() {
+  const api = useApiClient()
   const [logs, setLogs] = useState<AuditLogRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
   const [actionFilter, setActionFilter] = useState("")
   const [page, setPage] = useState(0)
 
-  useEffect(() => {
-    let cancelled = false
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  const fetchLogs = useCallback(async (filter: string, currentPage: number) => {
     setIsLoading(true)
-
-    const params = new URLSearchParams({
+    const params: Record<string, string> = {
       limit: String(LIMIT),
-      offset: String(page * LIMIT),
-    })
-    if (actionFilter) params.set("action", actionFilter)
+      offset: String(currentPage * LIMIT),
+    }
+    if (filter) params.action = filter
 
-    fetch(`/api/audit-logs?${params}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return
-        if (data.success) {
-          setLogs(data.data)
-          setTotal(data.pagination.total)
-        }
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (!cancelled) setIsLoading(false)
-      })
+    try {
+      const result = await api.get<AuditLogRow[]>("/api/audit-logs", { params })
+      if (result.success) {
+        setFetchError(null)
+        setLogs(result.data ?? [])
+        setTotal((result as unknown as { pagination: { total: number } }).pagination?.total ?? 0)
+      }
+    } catch {
+      setFetchError("Failed to load audit logs")
+    } finally {
+      setIsLoading(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-    return () => { cancelled = true }
-  }, [actionFilter, page])
+  useEffect(() => {
+    fetchLogs(actionFilter, page)
+  }, [actionFilter, page, fetchLogs])
 
   const handleFilterChange = (value: string) => {
     setActionFilter(value === "ALL" ? "" : value)
@@ -188,6 +190,9 @@ export function AuditLogSection() {
         </div>
       </CardHeader>
       <CardContent>
+        {fetchError && (
+          <p className="text-sm text-destructive text-center py-4">{fetchError}</p>
+        )}
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (

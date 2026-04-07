@@ -15,15 +15,26 @@ export async function recalculateBankBalances(): Promise<void> {
 
   let running = settings ? Number(settings.openingBalance) : 0
 
+  // Collect updates needed, then batch them in a single transaction
+  const updates: { id: string; balanceAfter: number }[] = []
+
   for (const tx of allTransactions) {
     running += tx.type === "DEPOSIT" ? Number(tx.amount) : -Number(tx.amount)
 
     if (Number(tx.balanceAfter) !== running) {
-      await prisma.bankTransaction.update({
-        where: { id: tx.id },
-        data: { balanceAfter: running },
-      })
+      updates.push({ id: tx.id, balanceAfter: running })
     }
+  }
+
+  if (updates.length > 0) {
+    await prisma.$transaction(
+      updates.map((u) =>
+        prisma.bankTransaction.update({
+          where: { id: u.id },
+          data: { balanceAfter: u.balanceAfter },
+        })
+      )
+    )
   }
 }
 

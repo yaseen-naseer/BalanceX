@@ -1,8 +1,26 @@
 import { NextResponse } from "next/server"
 
 /**
- * Simple in-memory rate limiter for serverless environments.
- * For production at scale, consider using Redis or a dedicated rate limiting service.
+ * In-memory rate limiter — suitable for single-server deployments.
+ *
+ * Current implementation:
+ *   - Uses an in-memory Map<string, RateLimitEntry> to track request counts.
+ *   - Expired entries are cleaned up every 5 minutes.
+ *   - State resets on server restart and is NOT shared across instances.
+ *
+ * Limitations:
+ *   - Does not work across multiple server instances, containers, or serverless
+ *     function invocations because each process has its own Map.
+ *   - Unbounded growth between cleanup cycles if hit by many unique IPs.
+ *
+ * Production migration path:
+ *   1. Replace the in-memory Map with a Redis-backed store.
+ *   2. Recommended packages: @upstash/ratelimit (serverless-friendly) or
+ *      ioredis + a sliding-window algorithm for traditional deployments.
+ *   3. Keep the same RateLimitConfig / RateLimitResult interfaces so callers
+ *      (middleware, API routes) require zero changes.
+ *
+ * // TODO(production): Replace with Redis-backed rate limiter for multi-instance deployments
  */
 
 interface RateLimitEntry {

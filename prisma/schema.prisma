@@ -66,7 +66,7 @@ model DailyEntry {
   submittedAt DateTime?
 
   // Relations
-  user        User                  @relation(fields: [createdBy], references: [id])
+  user        User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   cashDrawer  DailyEntryCashDrawer?
   wallet      DailyEntryWallet?
   categories  DailyEntryCategory[]
@@ -77,6 +77,7 @@ model DailyEntry {
   cashFloat     CashFloatLog?
   amendments    DailyEntryAmendment[]
 
+  @@index([createdBy])
   @@map("daily_entries")
 }
 
@@ -204,22 +205,27 @@ model CreditCustomer {
 // 8. CREDIT SALE - Individual credit sale linked to daily entry
 // ============================================
 model CreditSale {
-  id                  String       @id @default(cuid())
-  dailyEntryId        String
-  customerId          String
-  wholesaleCustomerId String?
-  category            CategoryType @default(DHIRAAGU_BILLS)
-  amount              Decimal      @db.Decimal(12, 2) // For wholesale: reload amount (wallet deduction)
-  cashAmount          Decimal?     @db.Decimal(12, 2) // Wholesale only: cash owed by customer
-  discountPercent     Decimal?     @db.Decimal(4, 2)  // Wholesale only: discount % applied
-  reference           String?
-  createdAt           DateTime     @default(now())
+  id                    String       @id @default(cuid())
+  dailyEntryId          String
+  customerId            String
+  wholesaleCustomerId   String?
+  creditTransactionId   String?      @unique // FK to the corresponding CreditTransaction (B1)
+  category              CategoryType @default(DHIRAAGU_BILLS)
+  amount                Decimal      @db.Decimal(12, 2) // For wholesale: reload amount (wallet deduction)
+  cashAmount            Decimal?     @db.Decimal(12, 2) // Wholesale only: cash owed by customer
+  discountPercent       Decimal?     @db.Decimal(4, 2)  // Wholesale only: discount % applied
+  reference             String?
+  createdAt             DateTime     @default(now())
 
   // Relations
-  dailyEntry         DailyEntry         @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
-  customer           CreditCustomer     @relation(fields: [customerId], references: [id])
-  wholesaleCustomer  WholesaleCustomer? @relation(fields: [wholesaleCustomerId], references: [id])
+  dailyEntry           DailyEntry          @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
+  customer             CreditCustomer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  wholesaleCustomer    WholesaleCustomer?  @relation(fields: [wholesaleCustomerId], references: [id], onDelete: SetNull)
+  creditTransaction    CreditTransaction?  @relation(fields: [creditTransactionId], references: [id])
+  saleLineItem         SaleLineItem?
 
+  @@index([dailyEntryId])
+  @@index([customerId])
   @@index([wholesaleCustomerId])
   @@map("credit_sales")
 }
@@ -254,9 +260,12 @@ model CreditTransaction {
   balanceAfter Decimal @db.Decimal(12, 2)
 
   // Relations
-  customer CreditCustomer @relation(fields: [customerId], references: [id])
-  user     User           @relation(fields: [createdBy], references: [id])
+  customer   CreditCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  creditSale CreditSale?
 
+  @@index([customerId])
+  @@index([date])
   @@map("credit_transactions")
 }
 
@@ -285,9 +294,10 @@ model BankTransaction {
   dailyEntryDate String?
 
   // Relation
-  user User @relation(fields: [createdBy], references: [id])
+  user User @relation(fields: [createdBy], references: [id], onDelete: Restrict)
 
   @@index([dailyEntryDate])
+  @@index([date])
   @@map("bank_transactions")
 }
 
@@ -322,8 +332,9 @@ model WalletTopup {
   createdAt DateTime          @default(now())
 
   // Relation
-  user User @relation(fields: [createdBy], references: [id])
+  user User @relation(fields: [createdBy], references: [id], onDelete: Restrict)
 
+  @@index([date])
   @@map("wallet_topups")
 }
 
@@ -361,8 +372,9 @@ model TelcoScreenshot {
 
   // Relations
   dailyEntry DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
-  uploader   User       @relation(fields: [uploadedBy], references: [id])
+  uploader   User       @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
 
+  @@index([uploadedBy])
   @@map("telco_screenshots")
 }
 
@@ -513,10 +525,10 @@ model DailyEntryAmendment {
   dailyEntry   DailyEntry @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
   reason       String     @db.Text
   reopenedBy   String
-  reopenedByUser User     @relation("AmendmentReopener", fields: [reopenedBy], references: [id])
+  reopenedByUser User     @relation("AmendmentReopener", fields: [reopenedBy], references: [id], onDelete: Restrict)
   reopenedAt   DateTime   @default(now())
   resubmittedBy  String?
-  resubmittedByUser User? @relation("AmendmentResubmitter", fields: [resubmittedBy], references: [id])
+  resubmittedByUser User? @relation("AmendmentResubmitter", fields: [resubmittedBy], references: [id], onDelete: Restrict)
   resubmittedAt  DateTime?
   snapshotBefore String   @db.Text
   snapshotAfter  String?  @db.Text
@@ -542,15 +554,18 @@ model SaleLineItem {
   createdAt     DateTime      @default(now())
 
   wholesaleCustomerId String?
+  creditSaleId        String?   @unique // FK to CreditSale that created this item (B2)
   cashAmount          Decimal?  @db.Decimal(12, 2)  // What retailer paid/owes (wholesale only)
   discountPercent     Decimal?  @db.Decimal(4, 2)   // Discount % applied (wholesale only)
 
   // Relations
   dailyEntry         DailyEntry          @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
-  user               User                @relation(fields: [createdBy], references: [id])
-  wholesaleCustomer  WholesaleCustomer?  @relation(fields: [wholesaleCustomerId], references: [id])
+  user               User                @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  wholesaleCustomer  WholesaleCustomer?  @relation(fields: [wholesaleCustomerId], references: [id], onDelete: SetNull)
+  creditSale         CreditSale?         @relation(fields: [creditSaleId], references: [id])
 
   @@index([dailyEntryId, category, customerType, paymentMethod])
+  @@index([dailyEntryId, createdBy])
   @@index([wholesaleCustomerId])
   @@map("sale_line_items")
 }

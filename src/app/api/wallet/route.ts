@@ -8,6 +8,7 @@ import {
   validateRequestBody,
 } from "@/lib/validations"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { logError } from "@/lib/logger"
 import { calculateReloadWalletCost } from "@/lib/utils/balance"
 import { getWholesaleReloadTotal } from "@/lib/utils/wholesale-reload"
 
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
         },
       })
     } catch (error) {
-      console.error("Error fetching previous closing:", error)
+      logError("Error fetching previous closing", error)
       return NextResponse.json(
         { success: false, error: "Failed to fetch previous closing" },
         { status: 500 }
@@ -225,7 +226,7 @@ export async function GET(request: NextRequest) {
       pagination: { total, limit, offset },
     })
   } catch (error) {
-    console.error("Error fetching wallet data:", error)
+    logError("Error fetching wallet data", error)
     return NextResponse.json(
       { success: false, error: "Failed to fetch wallet data" },
       { status: 500 }
@@ -326,7 +327,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error("Error creating wallet top-up:", error)
+    logError("Error creating wallet top-up", error)
     return NextResponse.json(
       { success: false, error: "Failed to create wallet top-up" },
       { status: 500 }
@@ -381,7 +382,7 @@ export async function PATCH(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Error updating wallet settings:", error)
+    logError("Error updating wallet settings", error)
     return NextResponse.json(
       { success: false, error: "Failed to update wallet settings" },
       { status: 500 }
@@ -484,7 +485,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deleting wallet top-up:", error)
+    logError("Error deleting wallet top-up", error)
     return NextResponse.json(
       { success: false, error: "Failed to delete wallet top-up" },
       { status: 500 }

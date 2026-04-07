@@ -8,60 +8,9 @@ import { convertPrismaDecimals } from "@/lib/utils/serialize"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 import type { CategoryType, CustomerType, PaymentMethod } from "@prisma/client"
 import { getWalletDeduction, checkWalletSufficiency } from "@/lib/utils/wallet-check"
-
-/**
- * Maps (customerType, paymentMethod) to the DailyEntryCategory field name.
- * e.g. (CONSUMER, CASH) => "consumerCash"
- */
-function getCategoryFieldName(customerType: CustomerType, paymentMethod: PaymentMethod): string {
-  const ct = customerType === "CONSUMER" ? "consumer" : "corporate"
-  const pm = paymentMethod.charAt(0) + paymentMethod.slice(1).toLowerCase()
-  return `${ct}${pm}`
-}
-
-/**
- * Recalculates the cell total from line items and updates the DailyEntryCategory.
- * Returns the new cell total.
- */
-async function syncCellTotal(
-  dailyEntryId: string,
-  category: CategoryType,
-  customerType: CustomerType,
-  paymentMethod: PaymentMethod
-): Promise<number> {
-  // For wholesale reload: grid shows cash received (cashAmount), not reload amount
-  // For all others: grid shows the sale amount
-  let total: number
-  if (category === "WHOLESALE_RELOAD") {
-    // Sum cashAmount where available, fall back to amount
-    const items = await prisma.saleLineItem.findMany({
-      where: { dailyEntryId, category, customerType, paymentMethod },
-      select: { amount: true, cashAmount: true },
-    })
-    total = items.reduce((sum, item) => sum + Number(item.cashAmount ?? item.amount), 0)
-  } else {
-    const agg = await prisma.saleLineItem.aggregate({
-      where: { dailyEntryId, category, customerType, paymentMethod },
-      _sum: { amount: true },
-    })
-    total = Number(agg._sum.amount ?? 0)
-  }
-
-  const fieldName = getCategoryFieldName(customerType, paymentMethod)
-
-  // Upsert the category record
-  await prisma.dailyEntryCategory.upsert({
-    where: { dailyEntryId_category: { dailyEntryId, category } },
-    update: { [fieldName]: total },
-    create: {
-      dailyEntryId,
-      category,
-      [fieldName]: total,
-    },
-  })
-
-  return total
-}
+import { logError } from "@/lib/logger"
+import { withTransaction } from "@/lib/utils/atomic"
+import { syncCellTotal } from "@/lib/utils/sync-cell-total"
 
 // GET /api/sale-line-items?dailyEntryId=xxx
 export async function GET(request: NextRequest) {
@@ -88,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     return successResponse(convertPrismaDecimals(items))
   } catch (error) {
-    console.error("Error fetching sale line items:", error)
+    logError("Error fetching sale line items", error)
     return ApiErrors.serverError("Failed to fetch sale line items")
   }
 }
@@ -138,44 +87,55 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Check wallet balance for reload sales
-    const walletDeduction = getWalletDeduction(category, amount)
-    if (walletDeduction > 0) {
-      const walletError = await checkWalletSufficiency(category, walletDeduction)
-      if (walletError) {
-        return ApiErrors.badRequest(walletError)
+    // Atomic: wallet check + create + syncCellTotal in a single serializable transaction
+    const { lineItem, cellTotal, cellCount } = await withTransaction(async (tx) => {
+      // Check wallet balance for reload sales (inside transaction for atomicity)
+      const walletDeduction = getWalletDeduction(category, amount)
+      if (walletDeduction > 0) {
+        const walletError = await checkWalletSufficiency(category, walletDeduction, tx)
+        if (walletError) {
+          throw new Error(`WALLET_INSUFFICIENT:${walletError}`)
+        }
       }
-    }
 
-    // Create line item
-    const lineItem = await prisma.saleLineItem.create({
-      data: {
-        dailyEntryId,
-        category,
-        customerType,
-        paymentMethod,
-        amount,
-        serviceNumber: serviceNumber || null,
-        note: note || null,
-        wholesaleCustomerId: wholesaleCustomerId || null,
-        cashAmount: cashAmount ?? null,
-        discountPercent: discountPercent ?? null,
-        createdBy: auth.user!.id,
-      },
-      include: {
-        wholesaleCustomer: {
-          select: { id: true, name: true, phone: true, businessName: true },
+      // Create line item
+      const item = await tx.saleLineItem.create({
+        data: {
+          dailyEntryId,
+          category,
+          customerType,
+          paymentMethod,
+          amount,
+          serviceNumber: serviceNumber || null,
+          note: note || null,
+          wholesaleCustomerId: wholesaleCustomerId || null,
+          cashAmount: cashAmount ?? null,
+          discountPercent: discountPercent ?? null,
+          createdBy: auth.user!.id,
         },
-      },
-    })
+        include: {
+          wholesaleCustomer: {
+            select: { id: true, name: true, phone: true, businessName: true },
+          },
+        },
+      })
 
-    // Sync cell total
-    const cellTotal = await syncCellTotal(dailyEntryId, category, customerType, paymentMethod)
+      // Sync cell total
+      const total = await syncCellTotal(dailyEntryId, category, customerType, paymentMethod, tx)
 
-    // Count items for this cell
-    const cellCount = await prisma.saleLineItem.count({
-      where: { dailyEntryId, category, customerType, paymentMethod },
+      // Count items for this cell
+      const count = await tx.saleLineItem.count({
+        where: { dailyEntryId, category, customerType, paymentMethod },
+      })
+
+      return { lineItem: item, cellTotal: total, cellCount: count }
+    }).catch((err: Error) => {
+      if (err.message.startsWith("WALLET_INSUFFICIENT:")) {
+        throw { walletError: err.message.replace("WALLET_INSUFFICIENT:", "") }
+      }
+      throw err
     })
+    // Note: wallet error is caught below in the outer catch
 
     await createAuditLog({
       action: "SALE_LINE_ITEM_ADDED",
@@ -199,8 +159,12 @@ export async function POST(request: NextRequest) {
       cellTotal,
       cellCount,
     }, 201)
-  } catch (error) {
-    console.error("Error creating sale line item:", error)
+  } catch (error: unknown) {
+    // Handle wallet insufficient error thrown from inside transaction
+    if (error && typeof error === "object" && "walletError" in error) {
+      return ApiErrors.badRequest((error as { walletError: string }).walletError)
+    }
+    logError("Error creating sale line item", error)
     return ApiErrors.serverError("Failed to create sale line item")
   }
 }

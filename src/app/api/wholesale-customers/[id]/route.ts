@@ -1,10 +1,13 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
-import { getAuthenticatedUser } from "@/lib/api-auth"
+import { getAuthenticatedUser, requirePermission } from "@/lib/api-auth"
+import { PERMISSIONS } from "@/lib/permissions"
 import { updateWholesaleCustomerSchema, validateRequestBody } from "@/lib/validations"
 import { successResponse, ApiErrors } from "@/lib/api-response"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { CURRENCY_CODE } from "@/lib/constants"
+import { logError } from "@/lib/logger"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -69,15 +72,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       ),
     })
   } catch (error) {
-    console.error("Error fetching wholesale customer:", error)
+    logError("Error fetching wholesale customer", error)
     return ApiErrors.serverError("Failed to fetch wholesale customer")
   }
 }
 
-// PATCH /api/wholesale-customers/[id] - Update customer
+// PATCH /api/wholesale-customers/[id] - Update customer (Owner/Accountant only)
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const auth = await getAuthenticatedUser()
-  if (!auth.authenticated) return auth.error!
+  const auth = await requirePermission(PERMISSIONS.WHOLESALE_CUSTOMER_EDIT)
+  if (auth.error) return auth.error
 
   const { id } = await params
 
@@ -124,21 +127,40 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       createdAt: customer.createdAt.toISOString(),
     })
   } catch (error) {
-    console.error("Error updating wholesale customer:", error)
+    logError("Error updating wholesale customer", error)
     return ApiErrors.serverError("Failed to update wholesale customer")
   }
 }
 
-// DELETE /api/wholesale-customers/[id] - Deactivate customer (soft delete)
+// DELETE /api/wholesale-customers/[id] - Deactivate customer (Owner/Accountant only)
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
-  const auth = await getAuthenticatedUser()
-  if (!auth.authenticated) return auth.error!
+  const auth = await requirePermission(PERMISSIONS.WHOLESALE_CUSTOMER_EDIT)
+  if (auth.error) return auth.error
 
   const { id } = await params
 
   try {
     const existing = await prisma.wholesaleCustomer.findUnique({ where: { id } })
     if (!existing) return ApiErrors.notFound("Wholesale customer")
+
+    // B5: Check for linked CreditCustomer with outstanding balance before deactivation
+    const linkedCreditCustomer = await prisma.creditCustomer.findFirst({
+      where: { phone: existing.phone },
+    })
+    if (linkedCreditCustomer) {
+      const transactions = await prisma.creditTransaction.findMany({
+        where: { customerId: linkedCreditCustomer.id },
+      })
+      const outstanding = transactions.reduce((sum, t) => {
+        if (t.type === "CREDIT_SALE") return sum + Number(t.amount)
+        return sum - Number(t.amount)
+      }, 0)
+      if (outstanding > 0 && auth.user!.role !== "OWNER") {
+        return ApiErrors.badRequest(
+          `Cannot deactivate: linked credit customer has outstanding balance of ${outstanding.toLocaleString()} ${CURRENCY_CODE}. Owner approval required.`
+        )
+      }
+    }
 
     await prisma.wholesaleCustomer.update({
       where: { id },
@@ -156,7 +178,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
     return successResponse({ success: true })
   } catch (error) {
-    console.error("Error deactivating wholesale customer:", error)
+    logError("Error deactivating wholesale customer", error)
     return ApiErrors.serverError("Failed to deactivate wholesale customer")
   }
 }
