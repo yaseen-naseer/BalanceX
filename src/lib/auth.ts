@@ -179,9 +179,36 @@ export const authOptions: NextAuthOptions = {
         token.username = user.username
         token.role = user.role
       }
+
+      // Periodically verify the user still exists in the DB (handles DB reset)
+      // Check at most once every 5 minutes to avoid hitting DB on every request
+      const now = Math.floor(Date.now() / 1000)
+      const lastVerified = (token.lastVerified as number) || 0
+      if (now - lastVerified > 300) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.id },
+            select: { id: true, isActive: true, role: true },
+          })
+          if (!dbUser || !dbUser.isActive) {
+            // User deleted or deactivated — invalidate session
+            return { ...token, invalidated: true }
+          }
+          // Sync role in case it changed
+          token.role = dbUser.role
+          token.lastVerified = now
+        } catch {
+          // DB error — keep token as-is, will retry next time
+        }
+      }
+
       return token
     },
     async session({ session, token }) {
+      if (token?.invalidated) {
+        // Return empty session — forces sign-out on client
+        return null as unknown as typeof session
+      }
       if (token) {
         session.user.id = token.id
         session.user.username = token.username

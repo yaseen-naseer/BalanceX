@@ -32,7 +32,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-07a'
+const WHATS_NEW_VERSION = '2026-04-07b'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -94,6 +94,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Added database indexes on key columns for faster queries at scale. Financial arithmetic now uses Decimal.js to eliminate floating-point rounding errors. Large exports are capped to prevent memory issues.',
         tag: 'Improvement',
+      },
+      {
+        icon: <ShieldCheck className="h-4 w-4 text-teal-500" />,
+        title: 'Stale Session Recovery',
+        description:
+          'Sessions are now verified against the database periodically. If the database is reset or your account is removed, you are automatically redirected to the setup or login page instead of seeing a broken dashboard.',
+        tag: 'Fix',
       },
     ],
   },

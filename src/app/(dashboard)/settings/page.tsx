@@ -56,7 +56,7 @@ export default function SettingsPage() {
       setIsLoadingUsers(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [currentUser?.role])
 
   useEffect(() => {
     fetchUsers()

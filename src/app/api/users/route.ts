@@ -34,7 +34,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     })
 
-    return NextResponse.json(users)
+    return NextResponse.json({ success: true, data: users })
   } catch (error) {
     logError("Error fetching users", error)
     return ApiErrors.serverError("Failed to fetch users")
