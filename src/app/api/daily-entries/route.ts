@@ -122,6 +122,16 @@ export async function POST(request: NextRequest) {
     const entryDate = new Date(body.date)
     entryDate.setUTCHours(0, 0, 0, 0)
 
+    // Reject future dates
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+    if (entryDate > today) {
+      return NextResponse.json(
+        { success: false, error: "Cannot create a daily entry for a future date" },
+        { status: 400 }
+      )
+    }
+
     // Check if entry already exists
     const existingEntry = await prisma.dailyEntry.findUnique({
       where: { date: entryDate },

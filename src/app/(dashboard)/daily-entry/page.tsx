@@ -232,6 +232,7 @@ export default function DailyEntryPage() {
                   mode="single"
                   selected={new Date(currentDate)}
                   onSelect={(date) => date && handleDateChange(format(date, 'yyyy-MM-dd'))}
+                  disabled={{ after: new Date() }}
                   initialFocus
                 />
               </PopoverContent>

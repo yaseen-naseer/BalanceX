@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-07d'
+const WHATS_NEW_VERSION = '2026-04-08a'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -115,6 +115,20 @@ const CHANGELOG: ChangeGroup[] = [
         title: 'Live Editing Presence',
         description:
           'When multiple users have the same daily entry open, a banner shows who else is viewing. Presence updates every 10 seconds and clears automatically when users leave the page.',
+        tag: 'New',
+      },
+      {
+        icon: <Shield className="h-4 w-4 text-red-500" />,
+        title: 'Future Date Blocked',
+        description:
+          'Users can no longer select a future date or create daily entries for future dates. The calendar disables future dates and the server rejects them.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Wallet className="h-4 w-4 text-emerald-500" />,
+        title: 'Retail Reload Calculator',
+        description:
+          'When adding a retail reload sale, the system now shows how much the customer receives after removing 8% GST. Enter cash received and see the reload amount instantly.',
         tag: 'New',
       },
     ],

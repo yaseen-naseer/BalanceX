@@ -60,6 +60,7 @@ export function AddLineItemPopover({
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false)
 
   const isWholesaleReload = categoryKey === "WHOLESALE_RELOAD"
+  const isRetailReload = categoryKey === "RETAIL_RELOAD"
   const selectedCustomer = wholesaleCustomers?.find((c) => c.id === selectedCustomerId)
 
   // Wholesale calculator: derive discount and reload from cash amount
@@ -339,7 +340,9 @@ export function AddLineItemPopover({
               </>
             ) : (
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Amount *</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  {isRetailReload ? "Cash Received *" : "Amount *"}
+                </label>
                 <Input
                   type="text"
                   inputMode="decimal"
@@ -354,6 +357,16 @@ export function AddLineItemPopover({
                   autoFocus={!isWholesaleReload}
                   onKeyDown={(e) => { if (e.key === "Enter") handleAdd() }}
                 />
+                {isRetailReload && parseFloat(amount) > 0 && (
+                  <div className="rounded-md bg-muted/50 p-2 mt-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Customer gets (excl. 8% GST)</span>
+                      <span className="font-mono font-semibold text-primary">
+                        {(Math.round((parseFloat(amount) / 1.08) * 100) / 100).toLocaleString()} MVR
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             <div>
