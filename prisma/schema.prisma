@@ -538,7 +538,23 @@ model DailyEntryAmendment {
 }
 
 // ============================================
-// 19. SALE LINE ITEM - Individual sale transactions per category cell
+// 19a. DAILY ENTRY PRESENCE - Ephemeral editing presence tracking
+// ============================================
+model DailyEntryPresence {
+  id           String   @id @default(cuid())
+  dailyEntryId String
+  userId       String
+  userName     String
+  lastSeenAt   DateTime @default(now())
+
+  @@unique([dailyEntryId, userId])
+  @@index([dailyEntryId])
+  @@index([lastSeenAt])
+  @@map("daily_entry_presences")
+}
+
+// ============================================
+// 20. SALE LINE ITEM - Individual sale transactions per category cell
 // ============================================
 model SaleLineItem {
   id            String        @id @default(cuid())

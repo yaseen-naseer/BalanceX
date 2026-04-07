@@ -52,6 +52,7 @@ import {
   ReopenDialog,
   AmendmentHistory,
 } from '@/components/daily-entry'
+import { PresenceBanner } from '@/components/daily-entry/presence-banner'
 import { DailyEntryProvider } from '@/contexts/daily-entry-context'
 
 export default function DailyEntryPage() {
@@ -180,6 +181,9 @@ export default function DailyEntryPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Active editors banner */}
+        <PresenceBanner editors={form.activeEditors} />
 
         {/* Date Selector & Status */}
         <div className="flex flex-wrap items-center justify-between gap-4">

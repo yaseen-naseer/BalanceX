@@ -29,10 +29,11 @@ import {
   AlertTriangle,
   Layers,
   FileSearch,
+  Users,
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-07c'
+const WHATS_NEW_VERSION = '2026-04-07d'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -108,6 +109,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Only the base 6% discount tier is enabled by default. The 6% minimum cash amount (500 MVR) is now locked and cannot be changed. Higher tiers can be enabled by the owner in settings.',
         tag: 'Improvement',
+      },
+      {
+        icon: <Users className="h-4 w-4 text-blue-500" />,
+        title: 'Live Editing Presence',
+        description:
+          'When multiple users have the same daily entry open, a banner shows who else is viewing. Presence updates every 10 seconds and clears automatically when users leave the page.',
+        tag: 'New',
       },
     ],
   },

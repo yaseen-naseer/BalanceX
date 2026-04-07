@@ -142,6 +142,7 @@ export interface UseDailyEntryFormReturn {
   // Live polling
   isLive: boolean
   lastChecked: Date | null
+  activeEditors: Array<{ userId: string; userName: string }>
 
   // Wallet opening override
   walletOpeningSource: string
@@ -294,6 +295,7 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
 
   // --- Live polling ---
   const pollUrl = entry?.id ? `/api/daily-entries/${date}/poll` : null
+  const [activeEditors, setActiveEditors] = useState<Array<{ userId: string; userName: string }>>([])
   const { isLive, lastChecked } = useLivePolling({
     url: pollUrl,
     intervalMs: 10_000,
@@ -303,7 +305,24 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
       fetchWallet()
       await fetchEntry(date, { silent: true })
     }, [fetchEntry, date, refreshLineItems, fetchWallet]),
+    onData: useCallback((data: unknown) => {
+      const d = data as { activeEditors?: Array<{ userId: string; userName: string }> }
+      setActiveEditors(d?.activeEditors ?? [])
+    }, []),
   })
+
+  // Clean up presence on page unload or date change
+  useEffect(() => {
+    if (!pollUrl) return
+    const handleUnload = () => {
+      fetch(pollUrl, { method: 'DELETE', keepalive: true }).catch(() => {})
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload)
+      handleUnload() // Also clean up when date changes or component unmounts
+    }
+  }, [pollUrl])
 
   // --- Edit permissions ---
   const editPermission = useMemo(() => {
@@ -462,6 +481,7 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     editPermission,
     isLive,
     lastChecked,
+    activeEditors,
     walletOpeningSource,
     walletOpeningReason,
     overrideWalletOpening,
