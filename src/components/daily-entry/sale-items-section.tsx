@@ -114,7 +114,11 @@ export function SaleItemsSection({
       {expanded && (
         <CardContent className="pt-0 space-y-3">
           {groups.map((group) => {
-            const groupTotal = group.items.reduce((sum, item) => sum + Number(item.amount), 0)
+            const isWholesale = group.category === "WHOLESALE_RELOAD"
+            const groupTotal = group.items.reduce((sum, item) => {
+              // For wholesale, show cash received total; for others, show amount
+              return sum + (isWholesale && item.cashAmount != null ? Number(item.cashAmount) : Number(item.amount))
+            }, 0)
             const isGroupExpanded = expandedGroups.has(group.key)
 
             return (
@@ -170,7 +174,10 @@ export function SaleItemsSection({
                             {format(new Date(item.timestamp), "hh:mm a")}
                           </span>
                           <span className="font-mono font-medium whitespace-nowrap">
-                            {Number(item.amount).toLocaleString()} MVR
+                            {(item.cashAmount != null && group.category === "WHOLESALE_RELOAD"
+                              ? Number(item.cashAmount)
+                              : Number(item.amount)
+                            ).toLocaleString()} MVR
                           </span>
                           {item.wholesaleCustomer && (
                             <span className="text-xs bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded px-1.5 py-0.5 truncate" title={`${item.wholesaleCustomer.name} (${item.wholesaleCustomer.phone})`}>
@@ -178,8 +185,8 @@ export function SaleItemsSection({
                             </span>
                           )}
                           {item.cashAmount != null && item.discountPercent != null && (
-                            <span className="text-xs text-muted-foreground whitespace-nowrap" title={`Cash: ${Number(item.cashAmount).toLocaleString()} MVR, Discount: ${Number(item.discountPercent)}%`}>
-                              💵{Number(item.cashAmount).toLocaleString()} @ {Number(item.discountPercent)}%
+                            <span className="text-xs text-muted-foreground whitespace-nowrap" title={`Reload: ${Number(item.amount).toLocaleString()} MVR, Discount: ${Number(item.discountPercent)}%`}>
+                              Reload {Number(item.amount).toLocaleString()} @ {Number(item.discountPercent)}%
                             </span>
                           )}
                           {item.serviceNumber && (

@@ -57,10 +57,30 @@ import { DailyEntryProvider } from '@/contexts/daily-entry-context'
 
 export default function DailyEntryPage() {
   const [currentDate, setCurrentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [initialDateResolved, setInitialDateResolved] = useState(false)
   const [showVarianceWarning, setShowVarianceWarning] = useState(false)
   const [varianceMessages, setVarianceMessages] = useState<ValidationMessage[]>([])
 
   const { user } = useAuth()
+
+  // On mount: check if yesterday has an unsubmitted entry — if so, stay on yesterday
+  useEffect(() => {
+    if (initialDateResolved) return
+    const today = format(new Date(), 'yyyy-MM-dd')
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = format(yesterday, 'yyyy-MM-dd')
+
+    fetch(`/api/daily-entries/${yesterdayStr}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.data && data.data.status !== 'SUBMITTED') {
+          setCurrentDate(yesterdayStr)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setInitialDateResolved(true))
+  }, [initialDateResolved])
 
   // Use the extracted form hook
   const form = useDailyEntryForm({ date: currentDate })
