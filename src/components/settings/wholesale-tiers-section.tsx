@@ -143,7 +143,7 @@ export function WholesaleTiersSection({ isOwner }: WholesaleTiersSectionProps) {
                         onChange={(e) => handleValueChange(tier.id, e.target.value)}
                         className="h-8 font-mono w-32"
                         placeholder="0"
-                        disabled={!isActive}
+                        disabled={!isActive || isLowest}
                       />
                       <div className="flex items-center gap-2">
                         <Switch

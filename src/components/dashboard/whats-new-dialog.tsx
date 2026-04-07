@@ -32,7 +32,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-07b'
+const WHATS_NEW_VERSION = '2026-04-07c'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -101,6 +101,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Sessions are now verified against the database periodically. If the database is reset or your account is removed, you are automatically redirected to the setup or login page instead of seeing a broken dashboard.',
         tag: 'Fix',
+      },
+      {
+        icon: <Store className="h-4 w-4 text-orange-500" />,
+        title: 'Wholesale Tier Defaults',
+        description:
+          'Only the base 6% discount tier is enabled by default. The 6% minimum cash amount (500 MVR) is now locked and cannot be changed. Higher tiers can be enabled by the owner in settings.',
+        tag: 'Improvement',
       },
     ],
   },

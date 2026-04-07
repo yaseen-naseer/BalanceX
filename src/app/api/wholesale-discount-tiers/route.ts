@@ -8,10 +8,10 @@ import { logError } from "@/lib/logger"
 
 const DEFAULT_TIERS = [
   { discountPercent: 6.0, minCashAmount: 500, sortOrder: 1, isActive: true },
-  { discountPercent: 6.5, minCashAmount: 1000, sortOrder: 2, isActive: true },
-  { discountPercent: 7.0, minCashAmount: 2000, sortOrder: 3, isActive: true },
-  { discountPercent: 7.5, minCashAmount: 3000, sortOrder: 4, isActive: true },
-  { discountPercent: 8.0, minCashAmount: 5000, sortOrder: 5, isActive: true },
+  { discountPercent: 6.5, minCashAmount: 1000, sortOrder: 2, isActive: false },
+  { discountPercent: 7.0, minCashAmount: 2000, sortOrder: 3, isActive: false },
+  { discountPercent: 7.5, minCashAmount: 3000, sortOrder: 4, isActive: false },
+  { discountPercent: 8.0, minCashAmount: 5000, sortOrder: 5, isActive: false },
 ]
 
 // GET /api/wholesale-discount-tiers - List all tiers (auto-seed if empty)
@@ -71,6 +71,14 @@ export async function PATCH(request: NextRequest) {
       const tier1Update = tiers.find((t) => t.id === tier1.id)
       if (tier1Update && !tier1Update.isActive) {
         return ApiErrors.badRequest("The 6% tier must always be active")
+      }
+    }
+
+    // The 6% tier min amount is fixed at 500
+    if (tier1) {
+      const tier1Update = tiers.find((t) => t.id === tier1.id)
+      if (tier1Update && tier1Update.minCashAmount !== 500) {
+        return ApiErrors.badRequest("The 6% tier minimum cash amount must be 500")
       }
     }
 
