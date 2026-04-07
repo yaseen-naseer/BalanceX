@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08a'
+const WHATS_NEW_VERSION = '2026-04-08b'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -130,6 +130,20 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'When adding a retail reload sale, the system now shows how much the customer receives after removing 8% GST. Enter cash received and see the reload amount instantly.',
         tag: 'New',
+      },
+      {
+        icon: <Store className="h-4 w-4 text-orange-500" />,
+        title: 'Wholesale Shows Cash Received',
+        description:
+          'Wholesale sale items now display the cash received as the primary amount, with the reload amount and discount shown separately. Wallet deductions remain unchanged.',
+        tag: 'Improvement',
+      },
+      {
+        icon: <Lock className="h-4 w-4 text-amber-500" />,
+        title: 'Day Must Be Closed First',
+        description:
+          'The daily entry page no longer auto-rolls to a new day if the previous day is still a draft. Staff must submit the current entry before moving on.',
+        tag: 'Fix',
       },
     ],
   },
