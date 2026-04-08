@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08o'
+const WHATS_NEW_VERSION = '2026-04-08p'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -180,6 +180,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Every financial value across the entire app — bank ledger, wallet, credit, sale items, cash float, reports, and all dialogs — now shows exactly 2 decimal places (e.g., 5,000.00 MVR).',
         tag: 'Improvement',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Credit Sales Now Visible in Grid',
+        description:
+          'Credit sales added to Dhiraagu Bills now correctly appear in the Sales by Category grid even before saving a draft.',
+        tag: 'Fix',
       },
     ],
   },

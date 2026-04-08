@@ -85,6 +85,20 @@ function entryToLocalData(entry: DailyEntryWithRelations | null): LocalEntryData
     }
   })
 
+  // Apply credit values even for categories that don't have a DB row yet
+  for (const [catKey, creditData] of creditByCategory) {
+    const existing = entry.categories?.find((c) => c.category === catKey)
+    if (!existing && (creditData.consumer > 0 || creditData.corporate > 0)) {
+      const isDhiraagu = catKey === 'DHIRAAGU_BILLS'
+      const key = catKey as Category
+      data.categories[key] = {
+        ...data.categories[key],
+        consumerCredit: creditData.consumer,
+        corporateCredit: isDhiraagu ? creditData.corporate : 0,
+      }
+    }
+  }
+
   if (entry.cashDrawer) {
     data.cashDrawer = {
       opening: Number(entry.cashDrawer.opening),
