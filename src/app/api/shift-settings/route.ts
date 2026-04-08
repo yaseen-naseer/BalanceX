@@ -9,6 +9,7 @@ import {
 } from "@/lib/validations"
 import { z } from "zod"
 import { logError } from "@/lib/logger"
+import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 
 // Schema for PATCH (includes id)
 const patchShiftSettingsSchema = z.object({
@@ -73,6 +74,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: shift.id, details: { setting: "shift_created", name }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
+
     return NextResponse.json(
       {
         success: true,
@@ -120,6 +123,8 @@ export async function PATCH(request: NextRequest) {
       },
     })
 
+    await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: id, details: { setting: "shift_updated", name, isActive }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
+
     return NextResponse.json({
       success: true,
       data: shift,
@@ -153,6 +158,8 @@ export async function DELETE(request: NextRequest) {
       where: { id },
       data: { isActive: false, isDefault: false },
     })
+
+    await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: id, details: { setting: "shift_deactivated" }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -8,6 +8,7 @@ import { join, resolve } from "path"
 import { existsSync } from "fs"
 import { randomBytes } from "crypto"
 import { logError } from "@/lib/logger"
+import { createAuditLog } from "@/lib/audit"
 
 // POST - Upload a screenshot for a specific date
 export async function POST(request: NextRequest) {
@@ -124,6 +125,13 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    await createAuditLog({
+      action: "SCREENSHOT_UPLOADED",
+      userId: session.user.id,
+      targetId: screenshot.id,
+      details: { date, filename, dailyEntryId: dailyEntry.id },
+    })
+
     return NextResponse.json(screenshot, { status: 201 })
   } catch (error) {
     logError("Error uploading screenshot", error)
@@ -237,6 +245,13 @@ export async function DELETE(request: NextRequest) {
     // Delete from database
     await prisma.telcoScreenshot.delete({
       where: { id },
+    })
+
+    await createAuditLog({
+      action: "SCREENSHOT_DELETED",
+      userId: session.user.id,
+      targetId: id,
+      details: { filename: screenshot.filename, dailyEntryId: screenshot.dailyEntryId },
     })
 
     return NextResponse.json({ success: true })

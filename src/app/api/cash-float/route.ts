@@ -4,6 +4,7 @@ import { getAuthenticatedUser, requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
 import { logError } from "@/lib/logger"
+import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 import {
   createCashFloatSchema,
   updateCashFloatSchema,
@@ -129,6 +130,15 @@ export async function POST(request: NextRequest) {
         closingTotal: 0,
         variance: 0,
       },
+    })
+
+    await createAuditLog({
+      action: "CASH_FLOAT_CREATED",
+      userId: auth.user!.id,
+      targetId: cashFloat.id,
+      details: { dailyEntryId, shiftName, selectedFloatAmount },
+      ipAddress: getClientIpFromRequest(request),
+      userAgent: getUserAgentFromRequest(request),
     })
 
     return NextResponse.json(
@@ -269,6 +279,15 @@ export async function PATCH(request: NextRequest) {
       data: updateData,
     })
 
+    await createAuditLog({
+      action: "CASH_FLOAT_UPDATED",
+      userId: auth.user!.id,
+      targetId: id,
+      details: { type, dailyEntryId: existingFloat.dailyEntryId },
+      ipAddress: getClientIpFromRequest(request),
+      userAgent: getUserAgentFromRequest(request),
+    })
+
     return NextResponse.json({
       success: true,
       data: convertPrismaDecimals(updatedFloat),
@@ -298,8 +317,19 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    const floatToDelete = await prisma.cashFloatLog.findUnique({ where: { id }, select: { dailyEntryId: true } })
+
     await prisma.cashFloatLog.delete({
       where: { id },
+    })
+
+    await createAuditLog({
+      action: "CASH_FLOAT_DELETED",
+      userId: auth.user!.id,
+      targetId: id,
+      details: { dailyEntryId: floatToDelete?.dailyEntryId },
+      ipAddress: getClientIpFromRequest(request),
+      userAgent: getUserAgentFromRequest(request),
     })
 
     return NextResponse.json({ success: true })

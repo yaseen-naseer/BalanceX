@@ -9,6 +9,7 @@ import {
 } from "@/lib/validations"
 import { z } from "zod"
 import { logError } from "@/lib/logger"
+import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 
 // Schema for PATCH (includes id)
 const patchCashFloatSettingsSchema = z.object({
@@ -69,6 +70,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: setting.id, details: { setting: "cash_float_setting_created", name, amount }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
+
     return NextResponse.json(
       {
         success: true,
@@ -117,6 +120,8 @@ export async function PATCH(request: NextRequest) {
       },
     })
 
+    await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: id, details: { setting: "cash_float_setting_updated", name, amount, isDefault, isActive }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
+
     return NextResponse.json({
       success: true,
       data: {
@@ -153,6 +158,8 @@ export async function DELETE(request: NextRequest) {
       where: { id },
       data: { isActive: false, isDefault: false },
     })
+
+    await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: id!, details: { setting: "cash_float_setting_deactivated" }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
 
     return NextResponse.json({ success: true })
   } catch (error) {

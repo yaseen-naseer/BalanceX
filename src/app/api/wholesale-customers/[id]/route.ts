@@ -108,10 +108,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     })
 
     await createAuditLog({
-      action: "SETTINGS_CHANGED",
+      action: "WHOLESALE_CUSTOMER_UPDATED",
       userId: auth.user!.id,
       targetId: customer.id,
-      details: { type: "wholesale_customer_updated", changes: data },
+      details: { changes: data },
       ipAddress: getClientIpFromRequest(request),
       userAgent: getUserAgentFromRequest(request),
     })

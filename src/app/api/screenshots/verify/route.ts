@@ -6,6 +6,7 @@ import { z } from "zod"
 import { validateRequestBody } from "@/lib/validations"
 import { ApiErrors } from "@/lib/api-response"
 import { logError } from "@/lib/logger"
+import { createAuditLog } from "@/lib/audit"
 
 const verifyScreenshotSchema = z.object({
   screenshotId: z.string().cuid("Invalid screenshot ID"),
@@ -39,6 +40,13 @@ export async function POST(request: NextRequest) {
         verifiedAt: verified ? new Date() : null,
         verifyNotes: notes || null,
       },
+    })
+
+    await createAuditLog({
+      action: "SCREENSHOT_VERIFIED",
+      userId: session.user.id,
+      targetId: screenshotId,
+      details: { verified, notes },
     })
 
     return NextResponse.json(screenshot)

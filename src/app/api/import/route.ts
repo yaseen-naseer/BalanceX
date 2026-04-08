@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { CategoryType } from "@prisma/client"
 import { logError } from "@/lib/logger"
+import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 
 interface ImportedRow {
   siteName: string
@@ -174,6 +175,15 @@ export async function POST(request: NextRequest) {
         data: { updatedAt: new Date() },
       })
 
+      await createAuditLog({
+        action: "DATA_IMPORTED",
+        userId: auth.user!.id,
+        targetId: existingEntry.id,
+        details: { date: body.date, action: "updated", rowCount: body.rows.length },
+        ipAddress: getClientIpFromRequest(request),
+        userAgent: getUserAgentFromRequest(request),
+      })
+
       return NextResponse.json({
         success: true,
         data: {
@@ -237,6 +247,15 @@ export async function POST(request: NextRequest) {
             },
           },
         },
+      })
+
+      await createAuditLog({
+        action: "DATA_IMPORTED",
+        userId: auth.user!.id,
+        targetId: newEntry.id,
+        details: { date: body.date, action: "created", rowCount: body.rows.length },
+        ipAddress: getClientIpFromRequest(request),
+        userAgent: getUserAgentFromRequest(request),
       })
 
       return NextResponse.json(

@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/api-auth"
 import { successResponse, ApiErrors } from "@/lib/api-response"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
 import { logError } from "@/lib/logger"
+import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 
 const DEFAULT_TIERS = [
   { discountPercent: 6.0, minCashAmount: 500, sortOrder: 1, isActive: true },
@@ -113,6 +114,14 @@ export async function PATCH(request: NextRequest) {
 
     const updated = await prisma.wholesaleDiscountTier.findMany({
       orderBy: { sortOrder: "asc" },
+    })
+
+    await createAuditLog({
+      action: "DISCOUNT_TIERS_UPDATED",
+      userId: auth.user!.id,
+      details: { tiersUpdated: tiers.length, activeTiers: activeTiers.length },
+      ipAddress: getClientIpFromRequest(request),
+      userAgent: getUserAgentFromRequest(request),
     })
 
     return successResponse(convertPrismaDecimals(updated))
