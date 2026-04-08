@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08p'
+const WHATS_NEW_VERSION = '2026-04-08q'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -186,6 +186,13 @@ const CHANGELOG: ChangeGroup[] = [
         title: 'Credit Sales Now Visible in Grid',
         description:
           'Credit sales added to Dhiraagu Bills now correctly appear in the Sales by Category grid even before saving a draft.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Floating-Point Variance Fix',
+        description:
+          'Fixed a precision issue where balanced entries showed a tiny non-zero variance (e.g., -0.00) and triggered a false warning on submission. All variance calculations now round to 2 decimal places.',
         tag: 'Fix',
       },
     ],

@@ -66,17 +66,20 @@ export function useDailyEntryCalculations({
 
   // Calculate variance data
   const variance = useMemo<VarianceData>(() => {
-    const walletExpected = localData.wallet.opening + totalTopups - reloadSalesTotal
-    const walletVariance = localData.wallet.closingActual - walletExpected
+    const round2 = (n: number) => Math.round(n * 100) / 100
 
-    const cashExpected =
+    const walletExpected = round2(localData.wallet.opening + totalTopups - reloadSalesTotal)
+    const walletVariance = round2(localData.wallet.closingActual - walletExpected)
+
+    const cashExpected = round2(
       localData.cashDrawer.opening +
       totals.totalCash +
       calculationData.cashSettlements -
       localData.cashDrawer.bankDeposits -
       calculationData.walletTopupsFromCash
+    )
 
-    const cashVariance = localData.cashDrawer.closingActual - cashExpected
+    const cashVariance = round2(localData.cashDrawer.closingActual - cashExpected)
 
     return {
       cashExpected,

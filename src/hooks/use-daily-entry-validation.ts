@@ -3,7 +3,7 @@
 import { useCallback } from "react"
 import type { VarianceData } from "@/components/daily-entry/types"
 import { VARIANCE_THRESHOLD } from "@/components/daily-entry/types"
-import { CURRENCY_CODE, WALLET_VARIANCE_THRESHOLD } from "@/lib/constants"
+import { CURRENCY_CODE, WALLET_VARIANCE_THRESHOLD, fmtCurrency } from "@/lib/constants"
 import type { ValidationMessage, ValidationResult } from "@/lib/validations/shared"
 
 export type { ValidationMessage, ValidationResult }
@@ -38,7 +38,7 @@ export function useDailyEntryValidation({
     if (absCashVariance > VARIANCE_THRESHOLD) {
       messages.push({
         type: "block",
-        message: `Cash variance exceeds ${CURRENCY_CODE} ${VARIANCE_THRESHOLD} (Current: ${variance.cashVariance > 0 ? "+" : ""}${variance.cashVariance} ${CURRENCY_CODE}).`,
+        message: `Cash variance exceeds ${CURRENCY_CODE} ${VARIANCE_THRESHOLD} (Current: ${variance.cashVariance > 0 ? "+" : ""}${fmtCurrency(variance.cashVariance)} ${CURRENCY_CODE}).`,
       })
     }
 
@@ -47,7 +47,7 @@ export function useDailyEntryValidation({
     if (absWalletVariance > WALLET_VARIANCE_THRESHOLD) {
       messages.push({
         type: "block",
-        message: `Wallet variance exceeds ${CURRENCY_CODE} ${WALLET_VARIANCE_THRESHOLD} (Current: ${variance.walletVariance > 0 ? "+" : ""}${variance.walletVariance} ${CURRENCY_CODE}).`,
+        message: `Wallet variance exceeds ${CURRENCY_CODE} ${WALLET_VARIANCE_THRESHOLD} (Current: ${variance.walletVariance > 0 ? "+" : ""}${fmtCurrency(variance.walletVariance)} ${CURRENCY_CODE}).`,
       })
     }
 
@@ -61,7 +61,7 @@ export function useDailyEntryValidation({
     if (absCashVariance > 0) {
       messages.push({
         type: "warning",
-        message: `Cash variance: ${variance.cashVariance > 0 ? "+" : ""}${variance.cashVariance} ${CURRENCY_CODE}`,
+        message: `Cash variance: ${variance.cashVariance > 0 ? "+" : ""}${fmtCurrency(variance.cashVariance)} ${CURRENCY_CODE}`,
       })
     }
 
@@ -69,7 +69,7 @@ export function useDailyEntryValidation({
     if (absWalletVariance > 0) {
       messages.push({
         type: "warning",
-        message: `Wallet variance: ${variance.walletVariance > 0 ? "+" : ""}${variance.walletVariance} ${CURRENCY_CODE}`,
+        message: `Wallet variance: ${variance.walletVariance > 0 ? "+" : ""}${fmtCurrency(variance.walletVariance)} ${CURRENCY_CODE}`,
       })
     }
 
