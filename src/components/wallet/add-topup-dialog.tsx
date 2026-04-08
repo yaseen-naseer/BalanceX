@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,6 +37,20 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
   const [reference, setReference] = useState('')
   const { addTopup } = useWallet()
   const systemStartDate = useSystemStartDate()
+  const [bankBalance, setBankBalance] = useState<number | null>(null)
+
+  // Fetch bank balance when dialog opens
+  useEffect(() => {
+    if (!open) return
+    fetch('/api/bank')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.data?.currentBalance != null) {
+          setBankBalance(data.data.currentBalance)
+        }
+      })
+      .catch(() => {})
+  }, [open])
 
   const numAmount = parseFloat(amount) || 0
 
@@ -151,6 +165,15 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
                 <span className="text-muted-foreground font-medium">Total Paid</span>
                 <span className="font-mono font-medium">{numAmount.toLocaleString()} MVR</span>
               </div>
+            </div>
+          )}
+
+          {method !== 'Cash' && bankBalance != null && numAmount > bankBalance && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
+              <span className="shrink-0">&#9888;</span>
+              <span>
+                Amount ({numAmount.toLocaleString()} MVR) exceeds current bank balance ({bankBalance.toLocaleString()} MVR).
+              </span>
             </div>
           )}
 

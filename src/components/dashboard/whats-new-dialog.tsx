@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08f'
+const WHATS_NEW_VERSION = '2026-04-08g'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -124,6 +124,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'All date pickers are now restricted between the system setup date and today. Users cannot navigate to dates before the system was set up. The Yesterday button is disabled when not applicable.',
         tag: 'Security',
+      },
+      {
+        icon: <Wallet className="h-4 w-4 text-amber-500" />,
+        title: 'Bank Balance Check on Top-up',
+        description:
+          'When topping up the wallet via Cheque or Transfer, the system warns if the amount exceeds the current bank balance.',
+        tag: 'Improvement',
       },
     ],
   },
