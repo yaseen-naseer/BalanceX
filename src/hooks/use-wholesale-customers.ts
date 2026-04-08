@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 import { useApiClient } from "./use-api-client"
 import type { WholesaleCustomerData, CreateWholesaleCustomerDto, WholesaleDiscountTierData } from "@/types"
+import { GST_MULTIPLIER } from "@/lib/constants"
 
 export interface UseWholesaleCustomersReturn {
   customers: WholesaleCustomerData[]
@@ -126,7 +127,7 @@ export function useWholesaleCustomers(): UseWholesaleCustomersReturn {
   // Calculate reload from cash and discount
   const calculateReload = useCallback(
     (cashAmount: number, discountPercent: number): number => {
-      const denominator = (1 - discountPercent / 100) * 1.08
+      const denominator = (1 - discountPercent / 100) * GST_MULTIPLIER
       return Math.round((cashAmount / denominator) * 100) / 100
     },
     []

@@ -290,15 +290,16 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const bankAmount = body.paidAmount ?? body.amount
       await prisma.bankTransaction.create({
         data: {
           type: "WITHDRAWAL",
-          amount: body.amount,
+          amount: bankAmount,
           reference: `Wallet Top-up`,
-          notes: `Auto-created from wallet top-up`,
+          notes: `Auto-created from wallet top-up (reload: ${body.amount})`,
           date: new Date(body.date),
           createdBy: auth.user!.id,
-          balanceAfter: currentBalance - body.amount,
+          balanceAfter: currentBalance - bankAmount,
         },
       })
     }

@@ -161,6 +161,7 @@ export const bankSettingsSchema = z.object({
 
 export const createWalletTopupSchema = z.object({
   amount: positiveNumberSchema,
+  paidAmount: positiveNumberSchema.optional(),
   source: walletSourceSchema,
   notes: z.string().max(500).optional().nullable(),
   date: dateStringSchema,

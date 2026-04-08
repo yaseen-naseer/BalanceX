@@ -196,6 +196,7 @@ export interface CreateBankTransactionDto {
 // Wallet Topup types
 export interface CreateWalletTopupDto {
   amount: number
+  paidAmount?: number
   source: "CASH" | "BANK"
   notes?: string
   date: string // ISO date string

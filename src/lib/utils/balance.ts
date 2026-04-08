@@ -89,20 +89,21 @@ interface WalletCategoryLike {
   corporateCredit: Decimal | number | string
 }
 
+import { GST_RATE } from "@/lib/constants"
+
 /**
- * Retail reload GST rate (8%).
- * Retail reload prices include GST — the wallet cost is the price excluding GST.
- * e.g. customer pays 108 MVR → wallet deduction = 100 MVR (108 / 1.08).
+ * @deprecated Use GST_RATE from @/lib/constants instead.
  */
-export const RETAIL_RELOAD_GST_RATE = 0.08
+export const RETAIL_RELOAD_GST_RATE = GST_RATE
 
 /**
  * Strip GST from a retail reload sale amount to get the wallet cost.
+ * e.g. customer pays 108 MVR → wallet deduction = 100 MVR (108 / 1.08).
  */
 export function stripRetailGst(amount: number): number {
   // Use Decimal arithmetic to avoid floating-point rounding errors on financial values
   return new DecimalLight(amount)
-    .div(new DecimalLight(1).plus(RETAIL_RELOAD_GST_RATE))
+    .div(new DecimalLight(1).plus(GST_RATE))
     .toDecimalPlaces(2)
     .toNumber()
 }

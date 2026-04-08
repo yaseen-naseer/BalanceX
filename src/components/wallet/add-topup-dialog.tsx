@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,7 @@ import { Plus, CalendarIcon } from 'lucide-react'
 import { format } from 'date-fns'
 import { useWallet } from '@/hooks/use-wallet'
 import { toast } from 'sonner'
+import { TOPUP_FACTOR, DEALER_DISCOUNT_RATE, GST_RATE } from '@/lib/constants'
 
 export interface AddTopupDialogProps {
   onAdd: () => void
@@ -33,22 +34,36 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
   const [notes, setNotes] = useState('')
   const { addTopup } = useWallet()
 
+  const numAmount = parseFloat(amount) || 0
+
+  // Calculate the breakdown from the amount paid to Dhiraagu
+  const breakdown = useMemo(() => {
+    if (numAmount <= 0) return null
+    const reloadValue = Math.round((numAmount / TOPUP_FACTOR) * 100) / 100
+    const discount = Math.round(reloadValue * DEALER_DISCOUNT_RATE * 100) / 100
+    const afterDiscount = Math.round((reloadValue - discount) * 100) / 100
+    const gst = Math.round(afterDiscount * GST_RATE * 100) / 100
+    return { reloadValue, discount, afterDiscount, gst }
+  }, [numAmount])
+
   const handleSubmit = async () => {
-    const numAmount = parseFloat(amount)
     if (!numAmount || numAmount <= 0) {
       toast.error('Please enter a valid amount')
       return
     }
 
+    if (!breakdown) return
+
     const result = await addTopup({
       date: format(date, 'yyyy-MM-dd'),
-      amount: numAmount,
+      amount: breakdown.reloadValue,
+      paidAmount: numAmount,
       source,
       notes: notes || undefined,
     })
 
     if (result) {
-      toast.success(`Top-up of ${numAmount.toLocaleString()} MVR added`)
+      toast.success(`Top-up added: ${breakdown.reloadValue.toLocaleString()} MVR reload (paid ${numAmount.toLocaleString()} MVR)`)
       setAmount('')
       setNotes('')
       setOpen(false)
@@ -67,7 +82,7 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Wallet Top-up</DialogTitle>
-          <DialogDescription>Record a reload wallet top-up</DialogDescription>
+          <DialogDescription>Enter the amount paid to Dhiraagu</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
@@ -84,6 +99,7 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
                   mode="single"
                   selected={date}
                   onSelect={(d) => d && setDate(d)}
+                  disabled={{ after: new Date() }}
                   initialFocus
                 />
               </PopoverContent>
@@ -91,7 +107,7 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="amount">Amount (MVR)</Label>
+            <Label htmlFor="amount">Amount Paid to Dhiraagu (MVR)</Label>
             <Input
               id="amount"
               type="number"
@@ -101,6 +117,31 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
               placeholder="0.00"
             />
           </div>
+
+          {breakdown && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Reload Value</span>
+                <span className="font-mono font-semibold text-primary">{breakdown.reloadValue.toLocaleString()} MVR</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Discount ({DEALER_DISCOUNT_RATE * 100}%)</span>
+                <span className="font-mono">-{breakdown.discount.toLocaleString()} MVR</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">After Discount</span>
+                <span className="font-mono">{breakdown.afterDiscount.toLocaleString()} MVR</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">GST ({GST_RATE * 100}%)</span>
+                <span className="font-mono">+{breakdown.gst.toLocaleString()} MVR</span>
+              </div>
+              <div className="flex justify-between text-xs border-t pt-1.5 mt-1.5">
+                <span className="text-muted-foreground font-medium">Total Paid</span>
+                <span className="font-mono font-medium">{numAmount.toLocaleString()} MVR</span>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Source</Label>
@@ -138,7 +179,9 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit}>Add Top-up</Button>
+          <Button onClick={handleSubmit} disabled={!breakdown}>
+            Add Top-up
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

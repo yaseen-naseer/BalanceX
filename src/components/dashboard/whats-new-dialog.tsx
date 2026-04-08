@@ -30,10 +30,11 @@ import {
   Layers,
   FileSearch,
   Users,
+  Calculator,
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08c'
+const WHATS_NEW_VERSION = '2026-04-08d'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -50,6 +51,61 @@ interface ChangeGroup {
 }
 
 const CHANGELOG: ChangeGroup[] = [
+  {
+    version: 'v0.6',
+    date: 'April 8, 2026',
+    items: [
+      {
+        icon: <Calculator className="h-4 w-4 text-blue-500" />,
+        title: 'Wallet Top-up Calculator',
+        description:
+          'When adding a wallet top-up, enter the amount paid to Dhiraagu and the system automatically calculates the reload value using the 8% dealer discount and 8% GST. Full breakdown shown before confirming.',
+        tag: 'New',
+      },
+      {
+        icon: <Wallet className="h-4 w-4 text-emerald-500" />,
+        title: 'Retail Reload Calculator',
+        description:
+          'Retail reload sales now show the customer reload amount after stripping 8% GST from the cash received.',
+        tag: 'New',
+      },
+      {
+        icon: <Shield className="h-4 w-4 text-red-500" />,
+        title: 'Future Date Blocked',
+        description:
+          'Calendar pickers and the server now reject future dates for daily entries and wallet top-ups.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Store className="h-4 w-4 text-orange-500" />,
+        title: 'Wholesale Shows Cash Received',
+        description:
+          'Wholesale sale items display cash received as the primary amount, with reload and discount shown separately.',
+        tag: 'Improvement',
+      },
+      {
+        icon: <Lock className="h-4 w-4 text-amber-500" />,
+        title: 'Day Must Be Closed First',
+        description:
+          'The daily entry page stays on the previous day if its entry is still a draft. Staff must submit before moving on.',
+        tag: 'Fix',
+      },
+      {
+        icon: <AlertTriangle className="h-4 w-4 text-red-500" />,
+        title: 'Variance Submission Controls',
+        description:
+          'Wallet and cash variances over 500 MVR now block submission. Smaller variances show a warning. All submissions require confirmation.',
+        tag: 'Security',
+      },
+      {
+        icon: <Wrench className="h-4 w-4 text-orange-500" />,
+        title: 'GST Centralized',
+        description:
+          'All GST and dealer discount rates are now defined in a single constants file. One-line change if government updates the rate.',
+        tag: 'Improvement',
+      },
+    ],
+  },
   {
     version: 'v0.5',
     date: 'April 7, 2026',
@@ -116,41 +172,6 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'When multiple users have the same daily entry open, a banner shows who else is viewing. Presence updates every 10 seconds and clears automatically when users leave the page.',
         tag: 'New',
-      },
-      {
-        icon: <Shield className="h-4 w-4 text-red-500" />,
-        title: 'Future Date Blocked',
-        description:
-          'Users can no longer select a future date or create daily entries for future dates. The calendar disables future dates and the server rejects them.',
-        tag: 'Fix',
-      },
-      {
-        icon: <Wallet className="h-4 w-4 text-emerald-500" />,
-        title: 'Retail Reload Calculator',
-        description:
-          'When adding a retail reload sale, the system now shows how much the customer receives after removing 8% GST. Enter cash received and see the reload amount instantly.',
-        tag: 'New',
-      },
-      {
-        icon: <Store className="h-4 w-4 text-orange-500" />,
-        title: 'Wholesale Shows Cash Received',
-        description:
-          'Wholesale sale items now display the cash received as the primary amount, with the reload amount and discount shown separately. Wallet deductions remain unchanged.',
-        tag: 'Improvement',
-      },
-      {
-        icon: <Lock className="h-4 w-4 text-amber-500" />,
-        title: 'Day Must Be Closed First',
-        description:
-          'The daily entry page no longer auto-rolls to a new day if the previous day is still a draft. Staff must submit the current entry before moving on.',
-        tag: 'Fix',
-      },
-      {
-        icon: <AlertTriangle className="h-4 w-4 text-red-500" />,
-        title: 'Variance Submission Controls',
-        description:
-          'Wallet and cash variances over 500 MVR now block submission entirely. Smaller variances show a warning. All submissions now require confirmation before finalizing.',
-        tag: 'Security',
       },
     ],
   },

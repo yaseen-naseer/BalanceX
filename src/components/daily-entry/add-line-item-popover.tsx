@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { Plus, Search, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import type { WholesaleCustomerData } from "@/types"
+import { GST_MULTIPLIER } from "@/lib/constants"
 
 export interface AddLineItemPopoverProps {
   categoryLabel: string
@@ -362,7 +363,7 @@ export function AddLineItemPopover({
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Customer gets (excl. 8% GST)</span>
                       <span className="font-mono font-semibold text-primary">
-                        {(Math.round((parseFloat(amount) / 1.08) * 100) / 100).toLocaleString()} MVR
+                        {(Math.round((parseFloat(amount) / GST_MULTIPLIER) * 100) / 100).toLocaleString()} MVR
                       </span>
                     </div>
                   </div>
