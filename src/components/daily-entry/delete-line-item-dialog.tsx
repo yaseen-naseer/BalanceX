@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { fmtCurrency } from "@/lib/constants"
 import type { SaleLineItemData } from "@/types"
 
 const DELETE_REASONS = [
@@ -67,7 +68,7 @@ export function DeleteLineItemDialog({ item, onClose, onDelete }: DeleteLineItem
       title="Remove Sale Item?"
       description={
         item
-          ? `Remove the ${Number(item.amount).toLocaleString()} MVR sale${item.serviceNumber ? ` (#${item.serviceNumber})` : ""}?`
+          ? `Remove the ${fmtCurrency(Number(item.amount))} MVR sale${item.serviceNumber ? ` (#${item.serviceNumber})` : ""}?`
           : ""
       }
       confirmLabel="Remove"

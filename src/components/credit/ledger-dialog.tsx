@@ -18,6 +18,7 @@ import {
 import { FileText, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { fmtCurrency } from '@/lib/constants'
 import type { CustomerWithTransactions } from './types'
 import type { CreditCustomerWithBalance } from '@/types'
 
@@ -80,7 +81,7 @@ export function LedgerDialog({ customer, trigger }: LedgerDialogProps) {
                 <p className="text-xs text-muted-foreground">Credit Limit</p>
                 <p className="font-mono font-semibold">
                   {customerData.creditLimit
-                    ? `${customerData.creditLimit.toLocaleString()} MVR`
+                    ? `${fmtCurrency(customerData.creditLimit)} MVR`
                     : 'Unlimited'}
                 </p>
               </div>
@@ -92,7 +93,7 @@ export function LedgerDialog({ customer, trigger }: LedgerDialogProps) {
                     customerData.outstandingBalance > 0 ? 'text-rose-600' : 'text-emerald-600'
                   )}
                 >
-                  {customerData.outstandingBalance.toLocaleString()} MVR
+                  {fmtCurrency(customerData.outstandingBalance)} MVR
                 </p>
               </div>
               <div className="rounded-lg bg-muted p-3 text-center">
@@ -144,10 +145,10 @@ export function LedgerDialog({ customer, trigger }: LedgerDialogProps) {
                             )}
                           >
                             {tx.type === 'CREDIT_SALE' ? '+' : '-'}
-                            {tx.amount.toLocaleString()} MVR
+                            {fmtCurrency(tx.amount)} MVR
                           </p>
                           <p className="text-xs text-muted-foreground font-mono">
-                            Balance: {tx.balanceAfter.toLocaleString()}
+                            Balance: {fmtCurrency(tx.balanceAfter)}
                           </p>
                         </div>
                       </div>

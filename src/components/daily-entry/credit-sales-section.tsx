@@ -19,7 +19,7 @@ import { Users, Trash2, ChevronDown, ChevronUp } from "lucide-react"
 import { toast } from "sonner"
 import { CreditSaleDialog } from "@/components/credit/credit-sale-dialog"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
-import { CURRENCY_CODE } from "@/lib/constants"
+import { CURRENCY_CODE, fmtCurrency } from "@/lib/constants"
 import type { DailyEntryWithRelations } from "@/types"
 
 const DELETE_REASONS = [
@@ -159,15 +159,15 @@ export function CreditSalesSection({
                   {sale.cashAmount != null ? (
                     <div className="text-right">
                       <span className="font-mono font-semibold text-amber-600">
-                        {Number(sale.cashAmount).toLocaleString()} {CURRENCY_CODE}
+                        {fmtCurrency(Number(sale.cashAmount))} {CURRENCY_CODE}
                       </span>
                       <span className="block text-[10px] text-muted-foreground">
-                        {Number(sale.amount).toLocaleString()} reload @ {Number(sale.discountPercent)}%
+                        {fmtCurrency(Number(sale.amount))} reload @ {Number(sale.discountPercent)}%
                       </span>
                     </div>
                   ) : (
                     <span className="font-mono font-semibold text-amber-600">
-                      {Number(sale.amount).toLocaleString()} {CURRENCY_CODE}
+                      {fmtCurrency(Number(sale.amount))} {CURRENCY_CODE}
                     </span>
                   )}
                   {!isReadOnly && (
@@ -194,7 +194,7 @@ export function CreditSalesSection({
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <span>Consumer:</span>
                   <span className="font-mono font-semibold text-foreground">
-                    {linkedConsumerCreditTotal.toLocaleString()} {CURRENCY_CODE}
+                    {fmtCurrency(linkedConsumerCreditTotal)} {CURRENCY_CODE}
                   </span>
                 </div>
               )}
@@ -202,7 +202,7 @@ export function CreditSalesSection({
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <span>Corporate:</span>
                   <span className="font-mono font-semibold text-foreground">
-                    {linkedCorporateCreditTotal.toLocaleString()} {CURRENCY_CODE}
+                    {fmtCurrency(linkedCorporateCreditTotal)} {CURRENCY_CODE}
                   </span>
                 </div>
               )}
@@ -225,7 +225,7 @@ export function CreditSalesSection({
         title="Remove Credit Sale?"
         description={
           pendingDelete
-            ? `Remove the ${pendingDelete.amount.toLocaleString()} ${CURRENCY_CODE} credit sale for ${pendingDelete.customerName}? This will reduce their outstanding balance.`
+            ? `Remove the ${fmtCurrency(pendingDelete.amount)} ${CURRENCY_CODE} credit sale for ${pendingDelete.customerName}? This will reduce their outstanding balance.`
             : ''
         }
         confirmLabel="Remove"

@@ -31,6 +31,7 @@ import { CustomerInfoCard } from './customer-info-card'
 import { LimitWarningDialog, type LimitWarningData } from './limit-warning-dialog'
 import { CustomerFormDialog } from './customer-form-dialog'
 import { WholesaleCustomerSelector } from './wholesale-customer-selector'
+import { fmtCurrency } from '@/lib/constants'
 
 const CREDIT_CATEGORIES = [
   { value: 'DHIRAAGU_BILLS', label: 'Dhiraagu Bills' },
@@ -166,7 +167,7 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
         return
       }
       if (wholesale.minCashAmount && numCashAmount < wholesale.minCashAmount) {
-        toast.error(`Minimum cash amount is ${wholesale.minCashAmount.toLocaleString()} MVR`)
+        toast.error(`Minimum cash amount is ${fmtCurrency(wholesale.minCashAmount)} MVR`)
         return
       }
       if (wholesaleDiscount == null || wholesaleReloadAmount == null) {
@@ -391,14 +392,14 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Reload (wallet deduction)</span>
                         <span className="font-mono font-semibold text-primary">
-                          {wholesaleReloadAmount.toLocaleString()} MVR
+                          {fmtCurrency(wholesaleReloadAmount)} MVR
                         </span>
                       </div>
                     )}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Credit balance (owes)</span>
                       <span className="font-mono font-semibold text-amber-600">
-                        {numCashAmount.toLocaleString()} MVR
+                        {fmtCurrency(numCashAmount)} MVR
                       </span>
                     </div>
                   </div>

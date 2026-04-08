@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { fmtCurrency } from "@/lib/constants"
 
 // Denominations in MVR
 const DENOMINATIONS = [
@@ -257,7 +258,7 @@ export function CashFloatDialog({
               <SelectContent>
                 {floatSettings.map((setting) => (
                   <SelectItem key={setting.id} value={setting.id}>
-                    {setting.name} ({setting.amount.toLocaleString()} MVR)
+                    {setting.name} ({fmtCurrency(setting.amount)} MVR)
                     {setting.isDefault && " - Default"}
                   </SelectItem>
                 ))}
@@ -300,7 +301,7 @@ export function CashFloatDialog({
                     placeholder="0"
                   />
                   <span className="text-sm text-muted-foreground w-20 text-right">
-                    = {((counts[denom.key] || 0) * denom.value).toLocaleString()}
+                    = {fmtCurrency((counts[denom.key] || 0) * denom.value)}
                   </span>
                 </div>
               ))}
@@ -313,11 +314,11 @@ export function CashFloatDialog({
               <span className="text-muted-foreground">
                 {type === "closing" ? "Expected Closing (Cash Reconciliation):" : "Float Amount:"}
               </span>
-              <span className="font-medium">{expectedTotal.toLocaleString()} MVR</span>
+              <span className="font-medium">{fmtCurrency(expectedTotal)} MVR</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Counted Total:</span>
-              <span className="font-medium">{calculatedTotal.toLocaleString()} MVR</span>
+              <span className="font-medium">{fmtCurrency(calculatedTotal)} MVR</span>
             </div>
             <div className="flex justify-between border-t pt-2">
               <span className="text-muted-foreground">Variance:</span>
@@ -331,7 +332,7 @@ export function CashFloatDialog({
                 }`}
               >
                 {variance >= 0 ? "+" : ""}
-                {variance.toLocaleString()} MVR
+                {fmtCurrency(variance)} MVR
               </span>
             </div>
           </div>

@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils"
 import { Plus, Search, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import type { WholesaleCustomerData } from "@/types"
-import { GST_MULTIPLIER } from "@/lib/constants"
+import { GST_MULTIPLIER, fmtCurrency } from "@/lib/constants"
 
 export interface AddLineItemPopoverProps {
   categoryLabel: string
@@ -123,7 +123,7 @@ export function AddLineItemPopover({
         return
       }
       if (minCashAmount && numCashAmount < minCashAmount) {
-        toast.error(`Minimum cash amount is ${minCashAmount.toLocaleString()} MVR`)
+        toast.error(`Minimum cash amount is ${fmtCurrency(minCashAmount)} MVR`)
         return
       }
       if (wholesaleDiscount == null) {
@@ -332,7 +332,7 @@ export function AddLineItemPopover({
                       <div className="flex justify-between text-xs">
                         <span className="text-muted-foreground">Reload Amount</span>
                         <span className="font-mono font-semibold text-primary">
-                          {wholesaleReloadAmount.toLocaleString()} MVR
+                          {fmtCurrency(wholesaleReloadAmount)} MVR
                         </span>
                       </div>
                     )}
@@ -363,7 +363,7 @@ export function AddLineItemPopover({
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Customer gets (excl. 8% GST)</span>
                       <span className="font-mono font-semibold text-primary">
-                        {(Math.round((parseFloat(amount) / GST_MULTIPLIER) * 100) / 100).toLocaleString()} MVR
+                        {fmtCurrency(Math.round((parseFloat(amount) / GST_MULTIPLIER) * 100) / 100)} MVR
                       </span>
                     </div>
                   </div>

@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { fmtCurrency } from '@/lib/constants'
 import type { CreditCustomerWithBalance } from '@/types'
 
 export interface CreditSummaryCardsProps {
@@ -37,7 +38,7 @@ export function CreditSummaryCards({ customers, isLoading }: CreditSummaryCardsP
                 totalOutstanding > 0 ? 'text-rose-600' : 'text-emerald-600'
               )}
             >
-              {totalOutstanding.toLocaleString()} MVR
+              {fmtCurrency(totalOutstanding)} MVR
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">{customers.length} customers</p>
@@ -59,7 +60,7 @@ export function CreditSummaryCards({ customers, isLoading }: CreditSummaryCardsP
                 consumerOutstanding > 0 ? 'text-amber-600' : 'text-emerald-600'
               )}
             >
-              {consumerOutstanding.toLocaleString()} MVR
+              {fmtCurrency(consumerOutstanding)} MVR
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
@@ -83,7 +84,7 @@ export function CreditSummaryCards({ customers, isLoading }: CreditSummaryCardsP
                 corporateOutstanding > 0 ? 'text-blue-600' : 'text-emerald-600'
               )}
             >
-              {corporateOutstanding.toLocaleString()} MVR
+              {fmtCurrency(corporateOutstanding)} MVR
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">

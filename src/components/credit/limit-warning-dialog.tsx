@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { ShieldAlert, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fmtCurrency } from '@/lib/constants'
 
 export interface LimitWarningData {
   currentBalance: number
@@ -65,11 +66,11 @@ export function LimitWarningDialog({
                 >
                   <div className="flex justify-between text-sm">
                     <span>Current Balance:</span>
-                    <span className="font-mono">{data.currentBalance.toLocaleString()} MVR</span>
+                    <span className="font-mono">{fmtCurrency(data.currentBalance)} MVR</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Sale Amount:</span>
-                    <span className="font-mono">+{data.saleAmount.toLocaleString()} MVR</span>
+                    <span className="font-mono">+{fmtCurrency(data.saleAmount)} MVR</span>
                   </div>
                   <div
                     className={cn(
@@ -81,16 +82,16 @@ export function LimitWarningDialog({
                     <span
                       className={cn('font-mono', isOwner ? 'text-amber-700' : 'text-rose-700')}
                     >
-                      {data.newBalance.toLocaleString()} MVR
+                      {fmtCurrency(data.newBalance)} MVR
                     </span>
                   </div>
                   <div className="flex justify-between text-sm text-rose-600">
                     <span>Credit Limit:</span>
-                    <span className="font-mono">{data.limit.toLocaleString()} MVR</span>
+                    <span className="font-mono">{fmtCurrency(data.limit)} MVR</span>
                   </div>
                   <div className="flex justify-between text-sm text-rose-600 font-medium">
                     <span>Exceeds By:</span>
-                    <span className="font-mono">{data.exceededBy.toLocaleString()} MVR</span>
+                    <span className="font-mono">{fmtCurrency(data.exceededBy)} MVR</span>
                   </div>
                 </div>
               )}

@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { CreditCard, Phone, Mail, FileText, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fmtCurrency } from '@/lib/constants'
 import { LedgerDialog } from './ledger-dialog'
 import { SettlementDialog } from './settlement-dialog'
 import { CustomerFormDialog } from './customer-form-dialog'
@@ -97,7 +98,7 @@ export function CustomerTable({
                 </TableCell>
                 <TableCell>
                   {customer.creditLimit ? (
-                    <span className="font-mono">{customer.creditLimit.toLocaleString()} MVR</span>
+                    <span className="font-mono">{fmtCurrency(customer.creditLimit)} MVR</span>
                   ) : (
                     <span className="text-muted-foreground">-</span>
                   )}
@@ -109,7 +110,7 @@ export function CustomerTable({
                       customer.outstandingBalance > 0 ? 'text-rose-600' : 'text-emerald-600'
                     )}
                   >
-                    {customer.outstandingBalance.toLocaleString()} MVR
+                    {fmtCurrency(customer.outstandingBalance)} MVR
                   </span>
                 </TableCell>
                 <TableCell>

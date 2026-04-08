@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { History, ChevronDown, ChevronUp, Eye } from 'lucide-react'
 import { format } from 'date-fns'
+import { fmtCurrency } from '@/lib/constants'
 import type { DailyEntryWithRelations } from '@/types'
 
 type Amendment = NonNullable<DailyEntryWithRelations['amendments']>[number]
@@ -142,9 +143,9 @@ function DiffDialog({ amendment, index, open, onClose }: DiffDialogProps) {
             {diffs.map((diff, i) => (
               <div key={i} className="grid grid-cols-3 gap-2 text-sm py-1 border-b last:border-0">
                 <span className="text-muted-foreground">{diff.field}</span>
-                <span className="text-right font-mono">{Number(diff.before).toLocaleString()}</span>
+                <span className="text-right font-mono">{fmtCurrency(Number(diff.before))}</span>
                 <span className={`text-right font-mono font-medium ${diff.after !== diff.before ? 'text-amber-600' : ''}`}>
-                  {Number(diff.after).toLocaleString()}
+                  {fmtCurrency(Number(diff.after))}
                 </span>
               </div>
             ))}

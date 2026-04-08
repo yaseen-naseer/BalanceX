@@ -16,6 +16,7 @@ import {
 } from "./types"
 import { AddLineItemPopover } from "./add-line-item-popover"
 import type { SaleLineItemData, CreateSaleLineItemDto, WholesaleCustomerData } from "@/types"
+import { fmtCurrency } from "@/lib/constants"
 
 // Maps UI types to API types
 function toApiCustomerType(ct: CustomerType): "CONSUMER" | "CORPORATE" {
@@ -201,7 +202,7 @@ export function CategoryTable({
                               </div>
                             ) : isAutoCredit ? (
                               <div className="h-8 w-24 flex items-center justify-end px-2 text-sm font-mono text-muted-foreground bg-muted/40 rounded-md border border-dashed">
-                                {((localData.categories[category.key][key] as number) || 0).toLocaleString()}
+                                {fmtCurrency((localData.categories[category.key][key] as number) || 0)}
                               </div>
                             ) : (
                               /* Read-only total + add button */
@@ -212,7 +213,7 @@ export function CategoryTable({
                                     ? "font-medium bg-primary/5 border border-primary/20"
                                     : "text-muted-foreground bg-muted/20 border border-transparent"
                                 )}>
-                                  {((localData.categories[category.key][key] as number) || 0).toLocaleString()}
+                                  {fmtCurrency((localData.categories[category.key][key] as number) || 0)}
                                   {cellHasLineItems && (
                                     <span className="ml-1 text-[10px] bg-primary/10 text-primary rounded px-1">
                                       {getLineItemCount!(category.key, toApiCustomerType(ct.key), toApiPaymentMethod(pm.key as "cash" | "transfer"))}
@@ -258,7 +259,7 @@ export function CategoryTable({
                       )}
                     </td>
                     <td className="p-2 text-right font-mono font-medium border-l align-top">
-                      {getCategoryTotal(category.key).toLocaleString()}
+                      {fmtCurrency(getCategoryTotal(category.key))}
                     </td>
                   </tr>
                 )
@@ -283,14 +284,14 @@ export function CategoryTable({
                           ct.key === "consumer" && pmIndex === 0 && "border-l"
                         )}
                       >
-                        {total.toLocaleString()}
+                        {fmtCurrency(total)}
                       </td>
                     )
                   })
                 )}
                 <td className="p-2 border-l"></td>
                 <td className="p-2 text-right font-mono border-l">
-                  {totals.totalRevenue.toLocaleString()}
+                  {fmtCurrency(totals.totalRevenue)}
                 </td>
               </tr>
             </tfoot>

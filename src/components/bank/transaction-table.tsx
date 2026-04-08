@@ -14,6 +14,7 @@ import {
 import { Landmark, Trash2, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { fmtCurrency } from '@/lib/constants'
 import { EditTransactionDialog } from './edit-transaction-dialog'
 import type { BankTransactionWithBalance } from './types'
 
@@ -106,10 +107,10 @@ export function TransactionTable({
                 )}
               >
                 {transaction.type === 'DEPOSIT' ? '+' : '-'}
-                {Number(transaction.amount).toLocaleString()}
+                {fmtCurrency(Number(transaction.amount))}
               </TableCell>
               <TableCell className="text-right font-mono">
-                {transaction.balance.toLocaleString()}
+                {fmtCurrency(transaction.balance)}
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-1">

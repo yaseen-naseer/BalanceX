@@ -21,7 +21,7 @@ import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { useBank } from '@/hooks/use-bank'
 import { toast } from 'sonner'
-import { CURRENCY_CODE } from '@/lib/constants'
+import { CURRENCY_CODE, fmtCurrency } from '@/lib/constants'
 import { useSystemStartDate } from '@/hooks/use-system-date'
 import { initialTransactionForm, type TransactionFormData } from './types'
 
@@ -59,7 +59,7 @@ export function AddTransactionDialog({ onAdd }: AddTransactionDialogProps) {
 
     if (result) {
       toast.success(
-        `${formData.type === 'DEPOSIT' ? 'Deposit' : 'Withdrawal'} of ${amount.toLocaleString()} ${CURRENCY_CODE} recorded`
+        `${formData.type === 'DEPOSIT' ? 'Deposit' : 'Withdrawal'} of ${fmtCurrency(amount)} ${CURRENCY_CODE} recorded`
       )
       setFormData(initialTransactionForm)
       setOpen(false)

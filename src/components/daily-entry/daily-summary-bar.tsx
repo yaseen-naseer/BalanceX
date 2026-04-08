@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Info } from "lucide-react"
 import type { TotalsData } from "./types"
+import { fmtCurrency } from "@/lib/constants"
 
 export interface DailySummaryBarProps {
   totals: TotalsData
@@ -21,29 +22,29 @@ export function DailySummaryBar({ totals }: DailySummaryBarProps) {
           <div className="flex items-center gap-6">
             <div>
               <p className="text-xs opacity-80">Total Revenue</p>
-              <p className="text-2xl font-bold">{totals.totalRevenue.toLocaleString()} MVR</p>
+              <p className="text-2xl font-bold">{fmtCurrency(totals.totalRevenue)} MVR</p>
             </div>
             <Separator orientation="vertical" className="h-10 bg-primary-foreground/20" />
             <div className="flex gap-4">
               <div>
                 <p className="text-xs opacity-80">Cash</p>
-                <p className="font-semibold">{totals.totalCash.toLocaleString()}</p>
+                <p className="font-semibold">{fmtCurrency(totals.totalCash)}</p>
               </div>
               <div>
                 <p className="text-xs opacity-80">Transfer</p>
-                <p className="font-semibold">{totals.totalTransfer.toLocaleString()}</p>
+                <p className="font-semibold">{fmtCurrency(totals.totalTransfer)}</p>
               </div>
               <div>
                 <p className="text-xs opacity-80">Credit</p>
-                <p className="font-semibold">{totals.totalCredit.toLocaleString()}</p>
+                <p className="font-semibold">{fmtCurrency(totals.totalCredit)}</p>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Info className="h-4 w-4 opacity-60" />
             <span className="text-sm opacity-80">
-              Consumer: {totals.consumerTotal.toLocaleString()} | Corporate:{" "}
-              {totals.corporateTotal.toLocaleString()}
+              Consumer: {fmtCurrency(totals.consumerTotal)} | Corporate:{" "}
+              {fmtCurrency(totals.corporateTotal)}
             </span>
           </div>
         </div>

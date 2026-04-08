@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight, DollarSign, CreditCard, BarChart3, Download, Calendar } from 'lucide-react'
 import { format, subMonths, addMonths } from 'date-fns'
-import { CURRENCY_CODE } from '@/lib/constants'
+import { CURRENCY_CODE, fmtCurrency } from '@/lib/constants'
 import { useReports, type MonthlyReportData } from '@/hooks/use-reports'
 import {
   SummaryCard,
@@ -145,14 +145,14 @@ export default function ReportsPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             title="Total Revenue"
-            value={`${(data?.summary.totalRevenue || 0).toLocaleString()} ${CURRENCY_CODE}`}
+            value={`${fmtCurrency(data?.summary.totalRevenue || 0)} ${CURRENCY_CODE}`}
             subtitle={`${data?.summary.submittedDays || 0} days recorded`}
             icon={DollarSign}
             isLoading={isLoading}
           />
           <SummaryCard
             title="Daily Average"
-            value={`${Math.round(data?.summary.dailyAverage || 0).toLocaleString()} ${CURRENCY_CODE}`}
+            value={`${fmtCurrency(Math.round(data?.summary.dailyAverage || 0))} ${CURRENCY_CODE}`}
             subtitle="Per working day"
             icon={BarChart3}
             isLoading={isLoading}
@@ -167,7 +167,7 @@ export default function ReportsPage() {
           />
           <SummaryCard
             title="Credit Outstanding"
-            value={`${totalCredit.toLocaleString()} ${CURRENCY_CODE}`}
+            value={`${fmtCurrency(totalCredit)} ${CURRENCY_CODE}`}
             subtitle={`${creditCustomers} customers with balance`}
             icon={CreditCard}
             variant={creditVariant as 'default' | 'success' | 'warning' | 'danger'}

@@ -11,6 +11,7 @@ import { DeleteLineItemDialog } from "./delete-line-item-dialog"
 import { EditLineItemDialog } from "./edit-line-item-dialog"
 import type { SaleLineItemData } from "@/types"
 import { CATEGORIES, CUSTOMER_TYPES, PAYMENT_METHODS } from "./types"
+import { fmtCurrency } from "@/lib/constants"
 
 export interface SaleItemsSectionProps {
   lineItems: SaleLineItemData[]
@@ -151,7 +152,7 @@ export function SaleItemsSection({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-semibold text-sm">
-                      {groupTotal.toLocaleString()} MVR
+                      {fmtCurrency(groupTotal)} MVR
                     </span>
                     {isGroupExpanded ? (
                       <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -174,10 +175,10 @@ export function SaleItemsSection({
                             {format(new Date(item.timestamp), "hh:mm a")}
                           </span>
                           <span className="font-mono font-medium whitespace-nowrap">
-                            {(item.cashAmount != null && group.category === "WHOLESALE_RELOAD"
+                            {fmtCurrency(item.cashAmount != null && group.category === "WHOLESALE_RELOAD"
                               ? Number(item.cashAmount)
                               : Number(item.amount)
-                            ).toLocaleString()} MVR
+                            )} MVR
                           </span>
                           {item.wholesaleCustomer && (
                             <span className="text-xs bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded px-1.5 py-0.5 truncate" title={`${item.wholesaleCustomer.name} (${item.wholesaleCustomer.phone})`}>
@@ -185,8 +186,8 @@ export function SaleItemsSection({
                             </span>
                           )}
                           {item.cashAmount != null && item.discountPercent != null && (
-                            <span className="text-xs text-muted-foreground whitespace-nowrap" title={`Reload: ${Number(item.amount).toLocaleString()} MVR, Discount: ${Number(item.discountPercent)}%`}>
-                              Reload {Number(item.amount).toLocaleString()} @ {Number(item.discountPercent)}%
+                            <span className="text-xs text-muted-foreground whitespace-nowrap" title={`Reload: ${fmtCurrency(Number(item.amount))} MVR, Discount: ${Number(item.discountPercent)}%`}>
+                              Reload {fmtCurrency(Number(item.amount))} @ {Number(item.discountPercent)}%
                             </span>
                           )}
                           {item.serviceNumber && (

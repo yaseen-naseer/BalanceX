@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Wallet, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
-import { WALLET_VARIANCE_THRESHOLD } from '@/lib/constants'
+import { WALLET_VARIANCE_THRESHOLD, fmtCurrency } from '@/lib/constants'
 import type { DailyEntryWithRelations } from '@/types'
 
 export interface TodayActivityCardProps {
@@ -51,7 +51,7 @@ export function TodayActivityCard({
               <span className="text-muted-foreground">Opening Balance</span>
               <div className="text-right">
                 <span className="font-mono font-medium">
-                  {Number(todayEntry.wallet.opening).toLocaleString()}
+                  {fmtCurrency(Number(todayEntry.wallet.opening))}
                 </span>
                 <span className="text-xs text-muted-foreground ml-2">
                   ({todayEntry.wallet.openingSource.replace(/_/g, ' ').toLowerCase()})
@@ -63,7 +63,7 @@ export function TodayActivityCard({
               <span className="text-muted-foreground">+ Top-ups</span>
               <div className="text-right">
                 <span className="font-mono font-medium text-emerald-600">
-                  +{todayTopups.toLocaleString()}
+                  +{fmtCurrency(todayTopups)}
                 </span>
                 {todayTopupsCount > 0 && (
                   <span className="text-xs text-muted-foreground ml-2">
@@ -77,7 +77,7 @@ export function TodayActivityCard({
               <span className="text-muted-foreground">- Reload Sales</span>
               <div className="text-right">
                 <span className="font-mono font-medium text-rose-600">
-                  -{todayReloadSales.toLocaleString()}
+                  -{fmtCurrency(todayReloadSales)}
                 </span>
                 <span className="text-xs text-muted-foreground ml-2">(from daily entry)</span>
               </div>
@@ -88,7 +88,7 @@ export function TodayActivityCard({
             <div className="flex justify-between items-center text-sm">
               <span className="font-medium">Expected Closing</span>
               <span className="font-mono font-semibold">
-                {Number(todayEntry.wallet.closingExpected).toLocaleString()}
+                {fmtCurrency(Number(todayEntry.wallet.closingExpected))}
               </span>
             </div>
 
@@ -96,7 +96,7 @@ export function TodayActivityCard({
               <span className="font-medium">Actual Closing</span>
               <div className="text-right">
                 <span className="font-mono font-semibold">
-                  {Number(todayEntry.wallet.closingActual).toLocaleString()}
+                  {fmtCurrency(Number(todayEntry.wallet.closingActual))}
                 </span>
                 <span className="text-xs text-muted-foreground ml-2">(from daily entry)</span>
               </div>
@@ -140,7 +140,7 @@ export function TodayActivityCard({
                 )}
               >
                 {Number(todayEntry.wallet.variance) > 0 ? '+' : ''}
-                {Number(todayEntry.wallet.variance).toLocaleString()} MVR
+                {fmtCurrency(Number(todayEntry.wallet.variance))} MVR
                 {Number(todayEntry.wallet.variance) !== 0 && ' \u26a0\ufe0f'}
               </span>
             </div>

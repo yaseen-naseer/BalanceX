@@ -15,7 +15,7 @@ import { useWallet } from '@/hooks/use-wallet'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { CURRENCY_CODE } from '@/lib/constants'
+import { CURRENCY_CODE, fmtCurrency } from '@/lib/constants'
 import { AddTopupDialog, WalletSummaryCards } from '@/components/wallet'
 import type { DailyEntryWithRelations } from '@/types'
 
@@ -266,14 +266,14 @@ export default function WalletPage() {
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">Top-ups</p>
                   <p className="font-mono font-semibold text-emerald-600">
-                    +{totalTopupsThisMonth.toLocaleString()}
+                    +{fmtCurrency(totalTopupsThisMonth)}
                   </p>
                   <p className="text-xs text-muted-foreground">{monthTopups.length} transaction{monthTopups.length !== 1 ? 's' : ''}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">Reload Sales</p>
                   <p className="font-mono font-semibold text-rose-600">
-                    -{totalReloadSalesThisMonth.toLocaleString()}
+                    -{fmtCurrency(totalReloadSalesThisMonth)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {monthEntries.filter(e => e.categories?.some(c =>
@@ -289,7 +289,7 @@ export default function WalletPage() {
                     totalTopupsThisMonth - totalReloadSalesThisMonth >= 0 ? 'text-emerald-600' : 'text-rose-600'
                   )}>
                     {totalTopupsThisMonth - totalReloadSalesThisMonth >= 0 ? '+' : ''}
-                    {(totalTopupsThisMonth - totalReloadSalesThisMonth).toLocaleString()}
+                    {fmtCurrency(totalTopupsThisMonth - totalReloadSalesThisMonth)}
                   </p>
                   <p className="text-xs text-muted-foreground">MVR</p>
                 </div>
@@ -342,7 +342,7 @@ export default function WalletPage() {
                         'font-mono font-semibold text-sm',
                         row.type === 'topup' ? 'text-emerald-600' : 'text-rose-600'
                       )}>
-                        {row.type === 'topup' ? '+' : '-'}{row.amount.toLocaleString()} {CURRENCY_CODE}
+                        {row.type === 'topup' ? '+' : '-'}{fmtCurrency(row.amount)} {CURRENCY_CODE}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(row.date + 'T12:00:00'), 'dd MMM')}

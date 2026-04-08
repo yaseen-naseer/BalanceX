@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, AlertCircle, XCircle, Wallet } from "lucide-react"
+import { fmtCurrency } from "@/lib/constants"
 
 interface CashFloatSummaryProps {
   cashFloat: CashFloatData | null
@@ -65,7 +66,7 @@ export function CashFloatSummary({
           <Badge variant="outline">{cashFloat.shiftName}</Badge>
         </CardTitle>
         <CardDescription>
-          Float Amount: {cashFloat.selectedFloatAmount?.toLocaleString()} MVR
+          Float Amount: {cashFloat.selectedFloatAmount ? fmtCurrency(cashFloat.selectedFloatAmount) : '0.00'} MVR
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -84,7 +85,7 @@ export function CashFloatSummary({
             <div>
               <p className="font-medium">Opening Float</p>
               <p className="text-sm text-muted-foreground">
-                {hasOpening ? `${cashFloat.openingTotal?.toLocaleString()} MVR` : "Not recorded"}
+                {hasOpening ? `${cashFloat.openingTotal ? fmtCurrency(cashFloat.openingTotal) : '0.00'} MVR` : "Not recorded"}
               </p>
             </div>
           </div>
@@ -115,7 +116,7 @@ export function CashFloatSummary({
             <div>
               <p className="font-medium">Closing Float</p>
               <p className="text-sm text-muted-foreground">
-                {hasClosing ? `${cashFloat.closingTotal?.toLocaleString()} MVR` : "Not recorded"}
+                {hasClosing ? `${cashFloat.closingTotal ? fmtCurrency(cashFloat.closingTotal) : '0.00'} MVR` : "Not recorded"}
               </p>
             </div>
           </div>
@@ -145,7 +146,7 @@ export function CashFloatSummary({
               }`}
             >
               {variance >= 0 ? "+" : ""}
-              {variance.toLocaleString()} MVR
+              {fmtCurrency(variance)} MVR
             </span>
           </div>
         )}

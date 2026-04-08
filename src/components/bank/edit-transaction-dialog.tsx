@@ -18,6 +18,7 @@ import {
 import { Pencil } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { fmtCurrency } from '@/lib/constants'
 import { toast } from 'sonner'
 import type { BankTransactionWithBalance } from './types'
 
@@ -67,7 +68,7 @@ export function EditTransactionDialog({ transaction, onUpdate }: EditTransaction
                 )}
               >
                 {transaction.type === 'DEPOSIT' ? '+' : '-'}
-                {Number(transaction.amount).toLocaleString()} MVR
+                {fmtCurrency(Number(transaction.amount))} MVR
               </span>
             </div>
             <Badge variant={transaction.type === 'DEPOSIT' ? 'default' : 'destructive'}>

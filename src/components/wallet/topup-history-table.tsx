@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Wallet, Trash2 } from 'lucide-react'
+import { fmtCurrency } from '@/lib/constants'
 import { format } from 'date-fns'
 
 interface Topup {
@@ -84,7 +85,7 @@ export function TopupHistoryTable({
                 {topup.notes || <span className="text-muted-foreground">-</span>}
               </TableCell>
               <TableCell className="text-right font-mono font-medium text-emerald-600">
-                +{Number(topup.amount).toLocaleString()} MVR
+                +{fmtCurrency(Number(topup.amount))} MVR
               </TableCell>
               {!isSales && (
                 <TableCell>

@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08m'
+const WHATS_NEW_VERSION = '2026-04-08n'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -178,7 +178,7 @@ const CHANGELOG: ChangeGroup[] = [
         icon: <Database className="h-4 w-4 text-indigo-500" />,
         title: 'Consistent Currency Formatting',
         description:
-          'All financial values — closing balances, expected amounts, variances, and breakdowns — now consistently display with 2 decimal places across the daily entry and day detail pages.',
+          'Every financial value across the entire app — bank ledger, wallet, credit, sale items, cash float, reports, and all dialogs — now shows exactly 2 decimal places (e.g., 5,000.00 MVR).',
         tag: 'Improvement',
       },
     ],

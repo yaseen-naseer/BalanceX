@@ -16,7 +16,7 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { initialSettlementForm, type SettlementFormData } from './types'
-import { CURRENCY_CODE } from '@/lib/constants'
+import { CURRENCY_CODE, fmtCurrency } from '@/lib/constants'
 import type { CreditCustomerWithBalance, CreateSettlementDto } from '@/types'
 
 export interface SettlementDialogProps {
@@ -63,7 +63,7 @@ export function SettlementDialog({ customer, onSubmit, trigger }: SettlementDial
           <div className="rounded-lg bg-muted p-4 flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Outstanding Balance</span>
             <span className="text-xl font-bold text-rose-600">
-              {customer.outstandingBalance.toLocaleString()} {CURRENCY_CODE}
+              {fmtCurrency(customer.outstandingBalance)} {CURRENCY_CODE}
             </span>
           </div>
           <div className="space-y-2">

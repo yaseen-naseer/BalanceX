@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { ChevronsUpDown, Check, User, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fmtCurrency } from '@/lib/constants'
 import type { CreditCustomerWithBalance } from '@/types'
 
 export interface CustomerSelectorProps {
@@ -116,11 +117,11 @@ export function CustomerSelector({
                             : 'text-muted-foreground'
                         )}
                       >
-                        {customer.outstandingBalance.toLocaleString()} MVR
+                        {fmtCurrency(customer.outstandingBalance)} MVR
                       </p>
                       {customer.creditLimit !== null && (
                         <p className="text-xs text-muted-foreground">
-                          Limit: {customer.creditLimit.toLocaleString()}
+                          Limit: {fmtCurrency(customer.creditLimit)}
                         </p>
                       )}
                     </div>
