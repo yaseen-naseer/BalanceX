@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08i'
+const WHATS_NEW_VERSION = '2026-04-08j'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -151,6 +151,13 @@ const CHANGELOG: ChangeGroup[] = [
         title: 'Dashboard Alert Links Fixed',
         description:
           'Missing screenshot and unverified alerts now link to the correct date on the Day Detail page instead of the daily entry page.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Auto-Logout Redirect Fixed',
+        description:
+          'Fixed an issue where the idle timeout logout redirected to the wrong port. Session logout now correctly redirects to the login page.',
         tag: 'Fix',
       },
     ],
