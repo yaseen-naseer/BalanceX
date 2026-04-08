@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils"
 import { CurrencyInput } from "@/components/shared"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { AddTopupDialog } from "@/components/wallet"
-import { CURRENCY_CODE } from "@/lib/constants"
+import { CURRENCY_CODE, fmtCurrency } from "@/lib/constants"
 import type { WalletData, VarianceData } from "./types"
 
 const OVERRIDE_REASONS = [
@@ -100,7 +100,7 @@ export function WalletSection({
             <Label htmlFor="walletOpening">Opening Balance</Label>
             <div className="flex items-center gap-2">
               <div className="flex-1 flex h-9 items-center rounded-md border bg-muted/40 px-3 font-mono text-sm">
-                {wallet.opening.toLocaleString()} {CURRENCY_CODE}
+                {fmtCurrency(wallet.opening)} {CURRENCY_CODE}
               </div>
               {!isReadOnly && (
                 <Button
@@ -125,7 +125,7 @@ export function WalletSection({
             <Label>Today&apos;s Top-ups</Label>
             <div className="flex items-center gap-2">
               <Input
-                value={`${totalTopups.toLocaleString()} ${CURRENCY_CODE}`}
+                value={`${fmtCurrency(totalTopups)} ${CURRENCY_CODE}`}
                 disabled
                 className="font-mono"
               />
@@ -142,7 +142,7 @@ export function WalletSection({
             {dayTopups.map((t) => (
               <div key={t.id} className="flex items-center justify-between text-sm">
                 <div>
-                  <span className="font-mono font-medium">{Number(t.amount).toLocaleString()} {CURRENCY_CODE}</span>
+                  <span className="font-mono font-medium">{fmtCurrency(Number(t.amount))} {CURRENCY_CODE}</span>
                   {t.notes && (
                     <p className="text-xs text-muted-foreground mt-0.5">{t.notes}</p>
                   )}
@@ -181,24 +181,24 @@ export function WalletSection({
               <div className="grid grid-cols-4 gap-2 text-sm">
                 <div className="text-center">
                   <p className="text-muted-foreground text-xs">Opening</p>
-                  <p className="font-mono font-medium">{wallet.opening.toLocaleString()}</p>
+                  <p className="font-mono font-medium">{fmtCurrency(wallet.opening)}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-muted-foreground text-xs">+ Top-ups</p>
                   <p className="font-mono font-medium text-emerald-600">
-                    +{totalTopups.toLocaleString()}
+                    +{fmtCurrency(totalTopups)}
                   </p>
                 </div>
                 <div className="text-center">
                   <p className="text-muted-foreground text-xs">- Reload Sales</p>
                   <p className={cn("font-mono font-medium", overBalance ? "text-rose-700 font-bold" : "text-rose-600")}>
-                    -{reloadSalesTotal.toLocaleString()}
+                    -{fmtCurrency(reloadSalesTotal)}
                   </p>
                 </div>
                 <div className="text-center">
                   <p className="text-muted-foreground text-xs">= Balance</p>
                   <p className={cn("font-mono font-bold", overBalance ? "text-rose-700" : "text-blue-700")}>
-                    {variance.walletExpected.toLocaleString()}
+                    {fmtCurrency(variance.walletExpected)}
                   </p>
                 </div>
               </div>
@@ -206,7 +206,7 @@ export function WalletSection({
                 <p className="text-xs text-rose-700">
                   Add a top-up of at least{" "}
                   <span className="font-semibold">
-                    {Math.abs(variance.walletExpected).toLocaleString()} {CURRENCY_CODE}
+                    {fmtCurrency(Math.abs(variance.walletExpected))} {CURRENCY_CODE}
                   </span>{" "}
                   or reduce reload sales before submitting.
                 </p>
@@ -245,7 +245,7 @@ export function WalletSection({
               ) : (
                 <>
                   {variance.walletVariance > 0 ? "+" : ""}
-                  {variance.walletVariance.toLocaleString()} {CURRENCY_CODE}
+                  {fmtCurrency(variance.walletVariance)} {CURRENCY_CODE}
                   <AlertTriangle className="ml-auto h-4 w-4" />
                 </>
               )}

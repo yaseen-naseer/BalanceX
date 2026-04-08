@@ -34,3 +34,8 @@ export const DEALER_DISCOUNT_RATE = 0.08
  * So: reload_value = paid / 0.9936
  */
 export const TOPUP_FACTOR = (1 - DEALER_DISCOUNT_RATE) * (1 + GST_RATE)
+
+/** Format a number as currency with exactly 2 decimal places */
+export function fmtCurrency(value: number): string {
+  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}

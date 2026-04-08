@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Banknote, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { CASH_VARIANCE_THRESHOLD, WALLET_VARIANCE_THRESHOLD, CURRENCY_CODE } from '@/lib/constants'
+import { CASH_VARIANCE_THRESHOLD, WALLET_VARIANCE_THRESHOLD, CURRENCY_CODE, fmtCurrency } from '@/lib/constants'
 import type { DailyEntryWithRelations } from '@/types'
 import type { CalculationData } from '@/hooks/use-daily-entry'
 import type { EntryTotals } from './types'
@@ -43,14 +43,14 @@ export function ReconciliationCard({
               <span>
                 Expected{' '}
                 <span className="font-semibold">
-                  {Number(entry.cashDrawer.closingExpected).toLocaleString()}
+                  {fmtCurrency(Number(entry.cashDrawer.closingExpected))}
                 </span>
               </span>
               <span className="text-muted-foreground">|</span>
               <span>
                 Actual{' '}
                 <span className="font-semibold">
-                  {Number(entry.cashDrawer.closingActual).toLocaleString()}
+                  {fmtCurrency(Number(entry.cashDrawer.closingActual))}
                 </span>
               </span>
               <span className="text-muted-foreground">|</span>
@@ -61,7 +61,7 @@ export function ReconciliationCard({
                 )}
               >
                 Var {Number(entry.cashDrawer.variance) > 0 ? '+' : ''}
-                {Number(entry.cashDrawer.variance).toLocaleString()}
+                {fmtCurrency(Number(entry.cashDrawer.variance))}
                 {Number(entry.cashDrawer.variance) !== 0 && ' ⚠️'}
               </span>
             </div>
@@ -79,14 +79,14 @@ export function ReconciliationCard({
               <span>
                 Expected{' '}
                 <span className="font-semibold">
-                  {Number(entry.wallet.closingExpected).toLocaleString()}
+                  {fmtCurrency(Number(entry.wallet.closingExpected))}
                 </span>
               </span>
               <span className="text-muted-foreground">|</span>
               <span>
                 Actual{' '}
                 <span className="font-semibold">
-                  {Number(entry.wallet.closingActual).toLocaleString()}
+                  {fmtCurrency(Number(entry.wallet.closingActual))}
                 </span>
               </span>
               <span className="text-muted-foreground">|</span>
@@ -97,7 +97,7 @@ export function ReconciliationCard({
                 )}
               >
                 Var {Number(entry.wallet.variance) > 0 ? '+' : ''}
-                {Number(entry.wallet.variance).toLocaleString()}
+                {fmtCurrency(Number(entry.wallet.variance))}
                 {Number(entry.wallet.variance) !== 0 && ' ⚠️'}
               </span>
             </div>
@@ -112,7 +112,7 @@ export function ReconciliationCard({
               <span className="font-medium text-sm">Bank Deposit:</span>
             </div>
             <span className="font-mono text-sm font-semibold text-blue-600">
-              {CURRENCY_CODE} {Number(entry.cashDrawer.bankDeposits).toLocaleString()}
+              {CURRENCY_CODE} {fmtCurrency(Number(entry.cashDrawer.bankDeposits))}
             </span>
           </div>
         )}
@@ -191,34 +191,34 @@ function CashDrawerCalculation({
       <div className="bg-white/50 rounded p-2 space-y-1 text-sm font-mono">
         <div className="flex justify-between">
           <span className="text-muted-foreground">Opening Balance</span>
-          <span>{Number(cashDrawer.opening).toLocaleString()}</span>
+          <span>{fmtCurrency(Number(cashDrawer.opening))}</span>
         </div>
         <div className="flex justify-between text-emerald-600">
           <span>+ Cash Sales</span>
-          <span>+{totalCash.toLocaleString()}</span>
+          <span>+{fmtCurrency(totalCash)}</span>
         </div>
         {calculationData.cashSettlements > 0 && (
           <div className="flex justify-between text-emerald-600">
             <span>+ Cash Settlements</span>
-            <span>+{calculationData.cashSettlements.toLocaleString()}</span>
+            <span>+{fmtCurrency(calculationData.cashSettlements)}</span>
           </div>
         )}
         {Number(cashDrawer.bankDeposits) > 0 && (
           <div className="flex justify-between text-blue-600">
             <span>- Bank Deposits</span>
-            <span>-{Number(cashDrawer.bankDeposits).toLocaleString()}</span>
+            <span>-{fmtCurrency(Number(cashDrawer.bankDeposits))}</span>
           </div>
         )}
         {calculationData.walletTopupsFromCash > 0 && (
           <div className="flex justify-between text-rose-600">
             <span>- Wallet Top-ups (Cash)</span>
-            <span>-{calculationData.walletTopupsFromCash.toLocaleString()}</span>
+            <span>-{fmtCurrency(calculationData.walletTopupsFromCash)}</span>
           </div>
         )}
         <Separator className="my-1" />
         <div className="flex justify-between font-semibold">
           <span>= Expected Closing</span>
-          <span>{Number(cashDrawer.closingExpected).toLocaleString()}</span>
+          <span>{fmtCurrency(Number(cashDrawer.closingExpected))}</span>
         </div>
       </div>
 
@@ -226,7 +226,7 @@ function CashDrawerCalculation({
         <div className="flex justify-between">
           <span className="text-muted-foreground">Actual Closing:</span>
           <span className="font-mono font-medium">
-            {Number(cashDrawer.closingActual).toLocaleString()}
+            {fmtCurrency(Number(cashDrawer.closingActual))}
           </span>
         </div>
         <div className="flex justify-between">
@@ -242,7 +242,7 @@ function CashDrawerCalculation({
             )}
           >
             {Number(cashDrawer.variance) > 0 ? '+' : ''}
-            {Number(cashDrawer.variance).toLocaleString()}
+            {fmtCurrency(Number(cashDrawer.variance))}
           </span>
         </div>
       </div>
@@ -293,7 +293,7 @@ function WalletCalculation({ wallet, reloadSales, walletTopupsTotal }: WalletCal
       <div className="bg-white/50 rounded p-2 space-y-1 text-sm font-mono">
         <div className="flex justify-between">
           <span className="text-muted-foreground">Opening Balance</span>
-          <span>{Number(wallet.opening).toLocaleString()}</span>
+          <span>{fmtCurrency(Number(wallet.opening))}</span>
         </div>
         <div className="text-xs text-muted-foreground pl-2">
           ({wallet.openingSource.replace(/_/g, ' ')})
@@ -301,19 +301,19 @@ function WalletCalculation({ wallet, reloadSales, walletTopupsTotal }: WalletCal
         {walletTopupsTotal > 0 && (
           <div className="flex justify-between text-emerald-600">
             <span>+ Top-ups</span>
-            <span>+{walletTopupsTotal.toLocaleString()}</span>
+            <span>+{fmtCurrency(walletTopupsTotal)}</span>
           </div>
         )}
         {reloadSales > 0 && (
           <div className="flex justify-between text-rose-600">
             <span>- Reload Sales</span>
-            <span>-{reloadSales.toLocaleString()}</span>
+            <span>-{fmtCurrency(reloadSales)}</span>
           </div>
         )}
         <Separator className="my-1" />
         <div className="flex justify-between font-semibold">
           <span>= Expected Closing</span>
-          <span>{Number(wallet.closingExpected).toLocaleString()}</span>
+          <span>{fmtCurrency(Number(wallet.closingExpected))}</span>
         </div>
       </div>
 
@@ -321,7 +321,7 @@ function WalletCalculation({ wallet, reloadSales, walletTopupsTotal }: WalletCal
         <div className="flex justify-between">
           <span className="text-muted-foreground">Actual Closing:</span>
           <span className="font-mono font-medium">
-            {Number(wallet.closingActual).toLocaleString()}
+            {fmtCurrency(Number(wallet.closingActual))}
           </span>
         </div>
         <div className="flex justify-between">
@@ -337,7 +337,7 @@ function WalletCalculation({ wallet, reloadSales, walletTopupsTotal }: WalletCal
             )}
           >
             {Number(wallet.variance) > 0 ? '+' : ''}
-            {Number(wallet.variance).toLocaleString()}
+            {fmtCurrency(Number(wallet.variance))}
           </span>
         </div>
       </div>

@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08l'
+const WHATS_NEW_VERSION = '2026-04-08m'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -173,6 +173,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Fixed a floating-point validation bug that rejected valid decimal amounts like 8919.13. All amount fields now accept any value up to 2 decimal places correctly.',
         tag: 'Fix',
+      },
+      {
+        icon: <Database className="h-4 w-4 text-indigo-500" />,
+        title: 'Consistent Currency Formatting',
+        description:
+          'All financial values — closing balances, expected amounts, variances, and breakdowns — now consistently display with 2 decimal places across the daily entry and day detail pages.',
+        tag: 'Improvement',
       },
     ],
   },

@@ -8,6 +8,7 @@ import { CheckCircle2, AlertTriangle, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CurrencyInput } from "@/components/shared"
 import type { CashDrawerData, TotalsData, VarianceData } from "./types"
+import { fmtCurrency } from "@/lib/constants"
 
 export interface CashDrawerSectionProps {
   cashDrawer: CashDrawerData
@@ -55,7 +56,7 @@ export function CashDrawerSection({
           <div className="space-y-2">
             <Label>Total Cash Sales</Label>
             <Input
-              value={`${totals.totalCash.toLocaleString()} MVR`}
+              value={`${fmtCurrency(totals.totalCash)} MVR`}
               disabled
               className="font-mono bg-muted"
             />
@@ -81,7 +82,7 @@ export function CashDrawerSection({
           <div className="space-y-2">
             <Label>Expected Closing</Label>
             <Input
-              value={`${variance.cashExpected.toLocaleString()} MVR`}
+              value={`${fmtCurrency(variance.cashExpected)} MVR`}
               disabled
               className="font-mono bg-muted"
             />
@@ -110,13 +111,13 @@ export function CashDrawerSection({
                 <div className="space-y-1">
                   <span className="text-xs text-muted-foreground">Opening Float</span>
                   <div className="font-mono text-sm">
-                    {(cashFloat.openingTotal || 0).toLocaleString()} MVR
+                    {fmtCurrency(cashFloat.openingTotal || 0)} MVR
                   </div>
                 </div>
                 <div className="space-y-1">
                   <span className="text-xs text-muted-foreground">Closing Float</span>
                   <div className="font-mono text-sm">
-                    {(cashFloat.closingTotal || 0).toLocaleString()} MVR
+                    {fmtCurrency(cashFloat.closingTotal || 0)} MVR
                   </div>
                 </div>
               </div>
@@ -132,7 +133,7 @@ export function CashDrawerSection({
                     )}
                   >
                     {(cashFloat.variance || 0) > 0 ? "+" : ""}
-                    {(cashFloat.variance || 0).toLocaleString()} MVR
+                    {fmtCurrency(cashFloat.variance || 0)} MVR
                   </span>
                 </div>
               )}
@@ -160,7 +161,7 @@ export function CashDrawerSection({
               <>
                 <AlertTriangle className="mr-2 h-5 w-5" />
                 {variance.cashVariance > 0 ? "+" : ""}
-                {variance.cashVariance.toLocaleString()} MVR
+                {fmtCurrency(variance.cashVariance)} MVR
               </>
             )}
           </div>
