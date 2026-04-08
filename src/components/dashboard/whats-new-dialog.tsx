@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08g'
+const WHATS_NEW_VERSION = '2026-04-08h'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -131,6 +131,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'When topping up the wallet via Cheque or Transfer, the system warns if the amount exceeds the current bank balance.',
         tag: 'Improvement',
+      },
+      {
+        icon: <ShieldCheck className="h-4 w-4 text-teal-500" />,
+        title: 'Complete Audit Trail',
+        description:
+          'Every write operation is now logged — screenshots, imports, cash float, shift settings, discount tiers, and wholesale customer updates all have full audit trails.',
+        tag: 'Security',
       },
     ],
   },
