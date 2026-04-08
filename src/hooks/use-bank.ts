@@ -25,7 +25,7 @@ interface UseBankReturn {
   fetchTransactions: () => Promise<void>
   addTransaction: (data: CreateBankTransactionDto) => Promise<BankTransaction | null>
   updateTransaction: (data: UpdateBankTransactionDto) => Promise<BankTransaction | null>
-  deleteTransaction: (id: string) => Promise<boolean>
+  deleteTransaction: (id: string) => Promise<{ success: boolean; error?: string }>
   setOpeningBalance: (balance: number) => Promise<boolean>
 }
 
@@ -81,17 +81,18 @@ export function useBank(): UseBankReturn {
     return null
   }, [api, fetchTransactions])
 
-  const deleteTransaction = useCallback(async (id: string): Promise<boolean> => {
+  const deleteTransaction = useCallback(async (id: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true)
     setError(null)
     const result = await api.delete("/api/bank", { params: { id } })
     if (result.success) {
       await fetchTransactions()
-      return true
+      return { success: true }
     }
-    setError(result.error || "Failed to delete transaction")
+    const errorMsg = result.error || "Failed to delete transaction"
+    setError(errorMsg)
     setIsLoading(false)
-    return false
+    return { success: false, error: errorMsg }
   }, [api, fetchTransactions])
 
   const setOpeningBalance = useCallback(async (balance: number): Promise<boolean> => {

@@ -36,6 +36,7 @@ import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { useDailyEntryForm, type ValidationMessage } from '@/hooks/use-daily-entry-form'
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
+import { useSystemStartDate } from '@/hooks/use-system-date'
 import { registerDirtyGuard } from '@/lib/dirty-guard'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
@@ -85,6 +86,7 @@ export default function DailyEntryPage() {
   // Use the extracted form hook
   const form = useDailyEntryForm({ date: currentDate })
   const wholesale = useWholesaleCustomers()
+  const systemStartDate = useSystemStartDate()
 
   // Guard unsaved changes on navigation and date changes
   const { showDialog: showUnsavedDialog, guard, handleLeave, handleSaveAndLeave, handleStay } =
@@ -216,9 +218,11 @@ export default function DailyEntryPage() {
               <Button
                 variant="ghost"
                 size="sm"
+                disabled={systemStartDate ? new Date().getTime() - systemStartDate.getTime() < 86400000 : false}
                 onClick={() => {
                   const yesterday = new Date()
                   yesterday.setDate(yesterday.getDate() - 1)
+                  if (systemStartDate && yesterday < systemStartDate) return
                   handleDateChange(format(yesterday, 'yyyy-MM-dd'))
                 }}
               >
@@ -248,7 +252,7 @@ export default function DailyEntryPage() {
                   mode="single"
                   selected={new Date(currentDate)}
                   onSelect={(date) => date && handleDateChange(format(date, 'yyyy-MM-dd'))}
-                  disabled={{ after: new Date() }}
+                  disabled={{ after: new Date(), ...(systemStartDate && { before: systemStartDate }) }}
                   initialFocus
                 />
               </PopoverContent>

@@ -20,6 +20,7 @@ import { format } from 'date-fns'
 import { useWallet } from '@/hooks/use-wallet'
 import { toast } from 'sonner'
 import { TOPUP_FACTOR, DEALER_DISCOUNT_RATE, GST_RATE } from '@/lib/constants'
+import { useSystemStartDate } from '@/hooks/use-system-date'
 
 export interface AddTopupDialogProps {
   onAdd: () => void
@@ -31,8 +32,11 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
   const [date, setDate] = useState(() => defaultDate ? new Date(defaultDate + 'T12:00:00') : new Date())
   const [amount, setAmount] = useState('')
   const [source, setSource] = useState<'CASH' | 'BANK'>('CASH')
+  const [method, setMethod] = useState<'Cash' | 'Cheque' | 'Transfer'>('Cash')
   const [notes, setNotes] = useState('')
+  const [reference, setReference] = useState('')
   const { addTopup } = useWallet()
+  const systemStartDate = useSystemStartDate()
 
   const numAmount = parseFloat(amount) || 0
 
@@ -54,18 +58,25 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
 
     if (!breakdown) return
 
+    const refPart = reference.trim() ? ` (${method === 'Cheque' ? 'CHQ' : 'REF'}: ${reference.trim()})` : ''
+    const methodNote = `${method} payment${refPart}`
+    const fullNotes = notes ? `${methodNote} — ${notes}` : methodNote
+
     const result = await addTopup({
       date: format(date, 'yyyy-MM-dd'),
       amount: breakdown.reloadValue,
       paidAmount: numAmount,
       source,
-      notes: notes || undefined,
+      notes: fullNotes,
     })
 
     if (result) {
-      toast.success(`Top-up added: ${breakdown.reloadValue.toLocaleString()} MVR reload (paid ${numAmount.toLocaleString()} MVR)`)
+      toast.success(`Top-up added: ${breakdown.reloadValue.toLocaleString()} MVR reload (paid ${numAmount.toLocaleString()} MVR via ${method})`)
       setAmount('')
       setNotes('')
+      setReference('')
+      setMethod('Cash')
+      setSource('CASH')
       setOpen(false)
       onAdd()
     }
@@ -99,7 +110,7 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
                   mode="single"
                   selected={date}
                   onSelect={(d) => d && setDate(d)}
-                  disabled={{ after: new Date() }}
+                  disabled={{ after: new Date(), ...(systemStartDate && { before: systemStartDate }) }}
                   initialFocus
                 />
               </PopoverContent>
@@ -144,26 +155,39 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
           )}
 
           <div className="space-y-2">
-            <Label>Source</Label>
+            <Label>Payment Method</Label>
             <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={source === 'CASH' ? 'default' : 'outline'}
-                onClick={() => setSource('CASH')}
-                className="flex-1"
-              >
-                Cash
-              </Button>
-              <Button
-                type="button"
-                variant={source === 'BANK' ? 'default' : 'outline'}
-                onClick={() => setSource('BANK')}
-                className="flex-1"
-              >
-                Bank Transfer
-              </Button>
+              {(['Cash', 'Cheque', 'Transfer'] as const).map((m) => (
+                <Button
+                  key={m}
+                  type="button"
+                  variant={method === m ? 'default' : 'outline'}
+                  onClick={() => {
+                    setMethod(m)
+                    setSource(m === 'Cash' ? 'CASH' : 'BANK')
+                  }}
+                  className="flex-1"
+                  size="sm"
+                >
+                  {m}
+                </Button>
+              ))}
             </div>
           </div>
+
+          {method !== 'Cash' && (
+            <div className="space-y-2">
+              <Label htmlFor="reference">
+                {method === 'Cheque' ? 'Cheque Number' : 'Transfer Reference'}
+              </Label>
+              <Input
+                id="reference"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder={method === 'Cheque' ? 'e.g. cheque number' : 'e.g. transfer reference'}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="notes">Notes (optional)</Label>

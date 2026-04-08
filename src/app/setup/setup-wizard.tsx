@@ -54,6 +54,14 @@ export function SetupWizard() {
     setErrors((e) => ({ ...e, [field]: undefined }))
   }
 
+  const clearZeroOnFocus = (field: keyof FormData) => () => {
+    if (form[field] === "0") setForm((f) => ({ ...f, [field]: "" }))
+  }
+
+  const handleKeyDown = (action: () => void) => (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") { e.preventDefault(); action() }
+  }
+
   function validateStep1(): boolean {
     const errs: Partial<FormData> = {}
     if (!form.name.trim()) errs.name = "Name is required"
@@ -195,7 +203,7 @@ export function SetupWizard() {
                 <Input type="password" placeholder="Min. 8 characters" value={form.password} onChange={set("password")} autoComplete="new-password" />
               </Field>
               <Field label="Confirm Password" error={errors.confirmPassword}>
-                <Input type="password" placeholder="Re-enter password" value={form.confirmPassword} onChange={set("confirmPassword")} autoComplete="new-password" />
+                <Input type="password" placeholder="Re-enter password" value={form.confirmPassword} onChange={set("confirmPassword")} autoComplete="new-password" onKeyDown={handleKeyDown(handleNext)} />
               </Field>
               <Button className="w-full" onClick={handleNext}>
                 Next <ChevronRight className="ml-1 h-4 w-4" />
@@ -222,11 +230,12 @@ export function SetupWizard() {
                   placeholder="0.00"
                   value={form.bankBalance}
                   onChange={set("bankBalance")}
+                  onFocus={clearZeroOnFocus("bankBalance")}
                   autoFocus
                 />
               </Field>
               <Field label="As of Date" error={errors.bankDate}>
-                <Input type="date" value={form.bankDate} onChange={set("bankDate")} />
+                <Input type="date" value={form.bankDate} onChange={set("bankDate")} onKeyDown={handleKeyDown(handleNext)} max={today} />
               </Field>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setStep(1)}>
@@ -258,11 +267,12 @@ export function SetupWizard() {
                   placeholder="0.00"
                   value={form.walletBalance}
                   onChange={set("walletBalance")}
+                  onFocus={clearZeroOnFocus("walletBalance")}
                   autoFocus
                 />
               </Field>
               <Field label="As of Date" error={errors.walletDate}>
-                <Input type="date" value={form.walletDate} onChange={set("walletDate")} />
+                <Input type="date" value={form.walletDate} onChange={set("walletDate")} onKeyDown={handleKeyDown(handleComplete)} max={today} />
               </Field>
               {submitError && (
                 <p className="text-sm text-destructive">{submitError}</p>

@@ -100,8 +100,10 @@ export default function BankLedgerPage() {
 
   const handleDelete = async (id: string) => {
     const result = await deleteTransaction(id)
-    if (result) {
+    if (result.success) {
       toast.success('Transaction deleted')
+    } else {
+      toast.error(result.error || 'Failed to delete transaction')
     }
   }
 

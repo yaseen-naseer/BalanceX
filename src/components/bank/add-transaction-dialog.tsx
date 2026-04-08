@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { useBank } from '@/hooks/use-bank'
 import { toast } from 'sonner'
 import { CURRENCY_CODE } from '@/lib/constants'
+import { useSystemStartDate } from '@/hooks/use-system-date'
 import { initialTransactionForm, type TransactionFormData } from './types'
 
 export interface AddTransactionDialogProps {
@@ -32,6 +33,7 @@ export function AddTransactionDialog({ onAdd }: AddTransactionDialogProps) {
   const [open, setOpen] = useState(false)
   const [formData, setFormData] = useState<TransactionFormData>(initialTransactionForm)
   const { addTransaction } = useBank()
+  const systemStartDate = useSystemStartDate()
 
   const handleSubmit = async () => {
     const amount = parseFloat(formData.amount)
@@ -45,11 +47,13 @@ export function AddTransactionDialog({ onAdd }: AddTransactionDialogProps) {
       return
     }
 
+    const reference = `${formData.depositMethod}: ${formData.reference}`
+
     const result = await addTransaction({
       date: format(formData.date, 'yyyy-MM-dd'),
       type: formData.type,
       amount,
-      reference: formData.reference,
+      reference,
       notes: formData.notes || undefined,
     })
 
@@ -91,6 +95,7 @@ export function AddTransactionDialog({ onAdd }: AddTransactionDialogProps) {
                   mode="single"
                   selected={formData.date}
                   onSelect={(date) => date && setFormData({ ...formData, date })}
+                  disabled={{ after: new Date(), ...(systemStartDate && { before: systemStartDate }) }}
                   initialFocus
                 />
               </PopoverContent>
@@ -140,12 +145,38 @@ export function AddTransactionDialog({ onAdd }: AddTransactionDialogProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="reference">Reference *</Label>
+            <Label>Method</Label>
+            <div className="flex gap-2">
+              {(['Cash', 'Cheque', 'Transfer'] as const).map((method) => (
+                <Button
+                  key={method}
+                  type="button"
+                  variant={formData.depositMethod === method ? 'default' : 'outline'}
+                  onClick={() => setFormData({ ...formData, depositMethod: method })}
+                  className="flex-1"
+                  size="sm"
+                >
+                  {method}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="reference">
+              {formData.depositMethod === 'Cash' ? 'Slip Number *'
+                : formData.depositMethod === 'Cheque' ? 'Cheque Number *'
+                : 'Transfer Reference *'}
+            </Label>
             <Input
               id="reference"
               value={formData.reference}
               onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
-              placeholder="Bank slip number, transfer reference, etc."
+              placeholder={
+                formData.depositMethod === 'Cash' ? 'e.g. ATM slip number'
+                : formData.depositMethod === 'Cheque' ? 'e.g. cheque number'
+                : 'e.g. transfer reference'
+              }
             />
           </div>
 

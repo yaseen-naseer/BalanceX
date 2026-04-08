@@ -1,8 +1,11 @@
 'use client'
 
+export type DepositMethod = 'Cash' | 'Cheque' | 'Transfer'
+
 export interface TransactionFormData {
   date: Date
   type: 'DEPOSIT' | 'WITHDRAWAL'
+  depositMethod: DepositMethod
   amount: string
   reference: string
   notes: string
@@ -21,6 +24,7 @@ export interface BankTransactionWithBalance {
 export const initialTransactionForm: TransactionFormData = {
   date: new Date(),
   type: 'DEPOSIT',
+  depositMethod: 'Cash',
   amount: '',
   reference: '',
   notes: '',

@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { useDailyEntry } from '@/hooks/use-daily-entry'
 import { useAuth } from '@/hooks/use-auth'
 import { useWallet } from '@/hooks/use-wallet'
+import { useSystemStartDate } from '@/hooks/use-system-date'
 import {
   calculateEntryTotals,
   ReconciliationCard,
@@ -45,6 +46,7 @@ export default function DayDetailPage() {
   const { screenshotUploaded, screenshotVerified } = useScreenshotStatus(currentDate)
 
   const canUpload = user?.role === 'OWNER' || user?.role === 'ACCOUNTANT'
+  const systemStartDate = useSystemStartDate()
 
   useEffect(() => {
     fetchEntry(currentDate)
@@ -86,6 +88,7 @@ export default function DayDetailPage() {
                   mode="single"
                   selected={new Date(currentDate)}
                   onSelect={(date) => date && setCurrentDate(format(date, 'yyyy-MM-dd'))}
+                  disabled={{ after: new Date(), ...(systemStartDate && { before: systemStartDate }) }}
                   initialFocus
                 />
               </PopoverContent>

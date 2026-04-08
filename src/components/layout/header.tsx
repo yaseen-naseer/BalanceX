@@ -1,7 +1,7 @@
 'use client';
 
 import { format } from 'date-fns';
-import { Calendar, Bell, Sparkles } from 'lucide-react';
+import { Calendar, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { openWhatsNew } from '@/components/dashboard/whats-new-dialog';
 
@@ -32,12 +32,6 @@ export function Header({ title, subtitle }: HeaderProps) {
                         {format(today, 'dd MMM yyyy')}
                     </span>
                 </div>
-
-                {/* Notifications */}
-                <Button variant="ghost" size="icon" className="relative hover:bg-muted rounded-xl" aria-label="Notifications">
-                    <Bell className="h-5 w-5" />
-                    <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
-                </Button>
 
                 {/* What's New */}
                 <Button

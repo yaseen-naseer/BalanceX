@@ -85,15 +85,18 @@ export async function calculateCashDrawer(
   })
   const cashSettlements = toNum(cashSettlementsAgg._sum.amount)
 
-  // Get wallet top-ups from cash for this date
-  const walletTopupsAgg = await prisma.walletTopup.aggregate({
-    _sum: { amount: true },
+  // Get wallet top-ups from cash for this date (use paidAmount = actual cash outflow)
+  const cashTopups = await prisma.walletTopup.findMany({
     where: {
       date: entryDate,
       source: "CASH",
     },
+    select: { amount: true, paidAmount: true },
   })
-  const walletTopupsFromCash = toNum(walletTopupsAgg._sum.amount)
+  const walletTopupsFromCash = cashTopups.reduce(
+    (sum, t) => sum + toNum(t.paidAmount ?? t.amount),
+    0
+  )
 
   const opening = entry.cashDrawer ? toNum(entry.cashDrawer.opening) : 0
   const bankDeposits = entry.cashDrawer ? toNum(entry.cashDrawer.bankDeposits) : 0

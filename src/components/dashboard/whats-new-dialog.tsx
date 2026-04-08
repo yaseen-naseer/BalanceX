@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08d'
+const WHATS_NEW_VERSION = '2026-04-08f'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -103,6 +103,27 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'All GST and dealer discount rates are now defined in a single constants file. One-line change if government updates the rate.',
         tag: 'Improvement',
+      },
+      {
+        icon: <CreditCard className="h-4 w-4 text-blue-500" />,
+        title: 'Bank Deposit & Withdrawal Methods',
+        description:
+          'Bank transactions now require a method — Cash, Cheque, or Transfer — with contextual reference labels. Auto-created wallet top-up entries are protected from accidental deletion.',
+        tag: 'New',
+      },
+      {
+        icon: <Wrench className="h-4 w-4 text-indigo-500" />,
+        title: 'Setup & UX Polish',
+        description:
+          'Setup wizard balance fields clear the leading zero on focus. Enter key advances through steps. Future dates blocked on all date pickers across the app.',
+        tag: 'Improvement',
+      },
+      {
+        icon: <Shield className="h-4 w-4 text-purple-500" />,
+        title: 'System Date Boundaries',
+        description:
+          'All date pickers are now restricted between the system setup date and today. Users cannot navigate to dates before the system was set up. The Yesterday button is disabled when not applicable.',
+        tag: 'Security',
       },
     ],
   },

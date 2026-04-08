@@ -296,6 +296,14 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // Block deletion of auto-created wallet top-up transactions
+    if (transactionToDelete.reference === "Wallet Top-up" && transactionToDelete.notes?.startsWith("Auto-created from wallet top-up")) {
+      return NextResponse.json(
+        { success: false, error: "This transaction was auto-created from a wallet top-up. Delete the top-up from the Wallet page instead." },
+        { status: 400 }
+      )
+    }
+
     // Atomic: delete + recalculate all balances in a single serializable transaction
     await withTransaction(async (tx) => {
       await tx.bankTransaction.delete({

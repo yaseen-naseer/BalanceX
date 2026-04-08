@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useSystemStartDate } from '@/hooks/use-system-date';
 import { toast } from 'sonner';
 import { ImportPreview, type ImportPreviewData, type ParsedRow } from '@/components/import/import-preview';
 
@@ -30,6 +31,7 @@ export default function ImportPage() {
     const [preview, setPreview] = useState<ImportPreviewData | null>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const systemStartDate = useSystemStartDate();
 
     const parseFile = useCallback(async (file: File) => {
         try {
@@ -187,6 +189,7 @@ export default function ImportPage() {
                                     mode="single"
                                     selected={selectedDate}
                                     onSelect={(date) => date && setSelectedDate(date)}
+                                    disabled={{ after: new Date(), ...(systemStartDate && { before: systemStartDate }) }}
                                     initialFocus
                                 />
                             </PopoverContent>

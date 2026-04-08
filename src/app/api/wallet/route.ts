@@ -261,6 +261,7 @@ export async function POST(request: NextRequest) {
     const topup = await prisma.walletTopup.create({
       data: {
         amount: body.amount,
+        paidAmount: body.paidAmount ?? body.amount,
         source: body.source,
         notes: body.notes || null,
         date: new Date(body.date),
