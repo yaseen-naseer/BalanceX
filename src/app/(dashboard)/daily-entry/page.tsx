@@ -145,13 +145,9 @@ export default function DailyEntryPage() {
       return
     }
 
-    if (validation.hasWarnings) {
-      setVarianceMessages(validation.messages)
-      setShowVarianceWarning(true)
-      return
-    }
-
-    handleSubmit(false)
+    // Always show confirmation dialog before submitting
+    setVarianceMessages(validation.messages)
+    setShowVarianceWarning(true)
   }
 
   // Handle actual submission

@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08b'
+const WHATS_NEW_VERSION = '2026-04-08c'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -144,6 +144,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'The daily entry page no longer auto-rolls to a new day if the previous day is still a draft. Staff must submit the current entry before moving on.',
         tag: 'Fix',
+      },
+      {
+        icon: <AlertTriangle className="h-4 w-4 text-red-500" />,
+        title: 'Variance Submission Controls',
+        description:
+          'Wallet and cash variances over 500 MVR now block submission entirely. Smaller variances show a warning. All submissions now require confirmation before finalizing.',
+        tag: 'Security',
       },
     ],
   },

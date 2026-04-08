@@ -3,7 +3,7 @@
 import { useCallback } from "react"
 import type { VarianceData } from "@/components/daily-entry/types"
 import { VARIANCE_THRESHOLD } from "@/components/daily-entry/types"
-import { CURRENCY_CODE } from "@/lib/constants"
+import { CURRENCY_CODE, WALLET_VARIANCE_THRESHOLD } from "@/lib/constants"
 import type { ValidationMessage, ValidationResult } from "@/lib/validations/shared"
 
 export type { ValidationMessage, ValidationResult }
@@ -42,6 +42,15 @@ export function useDailyEntryValidation({
       })
     }
 
+    // Hard block if wallet variance exceeds threshold
+    const absWalletVariance = Math.abs(variance.walletVariance)
+    if (absWalletVariance > WALLET_VARIANCE_THRESHOLD) {
+      messages.push({
+        type: "block",
+        message: `Wallet variance exceeds ${CURRENCY_CODE} ${WALLET_VARIANCE_THRESHOLD} (Current: ${variance.walletVariance > 0 ? "+" : ""}${variance.walletVariance} ${CURRENCY_CODE}).`,
+      })
+    }
+
     // Check for blocks
     const hasBlocks = messages.some((m) => m.type === "block")
     if (hasBlocks) {
@@ -56,7 +65,13 @@ export function useDailyEntryValidation({
       })
     }
 
-    // Wallet variance is informational only — shown in the wallet section, not a submit blocker
+    // Warning for non-zero wallet variance within threshold
+    if (absWalletVariance > 0) {
+      messages.push({
+        type: "warning",
+        message: `Wallet variance: ${variance.walletVariance > 0 ? "+" : ""}${variance.walletVariance} ${CURRENCY_CODE}`,
+      })
+    }
 
     const hasWarnings = messages.some((m) => m.type === "warning")
     return { canSubmit: true, hasWarnings, hasBlocks: false, messages }
