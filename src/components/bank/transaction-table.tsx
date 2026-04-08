@@ -72,7 +72,10 @@ export function TransactionTable({
           {transactions.map((transaction) => (
             <TableRow key={transaction.id}>
               <TableCell className="font-medium">
-                {format(new Date(transaction.date), 'dd MMM yyyy')}
+                <div>{format(new Date(transaction.date), 'dd MMM yyyy')}</div>
+                <div className="text-xs text-muted-foreground">
+                  {format(new Date(transaction.createdAt), 'hh:mm a')}
+                </div>
               </TableCell>
               <TableCell>
                 <Badge

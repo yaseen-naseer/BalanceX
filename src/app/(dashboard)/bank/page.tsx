@@ -107,18 +107,9 @@ export default function BankLedgerPage() {
     }
   }
 
-  // Calculate running balance using reduce to avoid mutation during render
-  const allTransactionsWithBalance: BankTransactionWithBalance[] = [...transactions]
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .reduce((acc, t) => {
-      const prevBalance = acc.length > 0 ? acc[acc.length - 1].balance : Number(openingBalance)
-      const newBalance = t.type === 'DEPOSIT'
-        ? prevBalance + Number(t.amount)
-        : prevBalance - Number(t.amount)
-      return [...acc, { ...t, balance: newBalance }]
-    }, [] as BankTransactionWithBalance[])
-
-  const transactionsWithBalance = allTransactionsWithBalance
+  // Use balanceAfter stored on each transaction (server-calculated)
+  const transactionsWithBalance: BankTransactionWithBalance[] = transactions
+    .map((t) => ({ ...t, balance: Number(t.balanceAfter ?? 0) }))
     .filter((t) => {
       const date = new Date(t.date)
       if (date < monthStart || date > monthEnd) {
@@ -129,7 +120,6 @@ export default function BankLedgerPage() {
       }
       return true
     })
-    .reverse()
 
   return (
     <div className="flex flex-col">

@@ -45,15 +45,14 @@ export async function GET(request: NextRequest) {
       where.date = { gte: startDate, lte: endDate }
     }
 
-    // Get transactions
+    // Get transactions (limit=0 means no limit)
     const transactions = await prisma.bankTransaction.findMany({
       where,
       include: {
         user: { select: { id: true, name: true } },
       },
-      orderBy: { date: "desc" },
-      take: limit,
-      skip: offset,
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      ...(limit > 0 && { take: limit, skip: offset }),
     })
 
     const total = await prisma.bankTransaction.count({ where })
@@ -143,25 +142,18 @@ export async function POST(request: NextRequest) {
       })
 
       const allTransactions = await tx.bankTransaction.findMany({
-        where: {
-          date: { lte: new Date(body.date) },
-        },
-        orderBy: { date: "asc" },
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
       })
 
-      let balanceBefore = settings ? Number(settings.openingBalance) : 0
+      let currentBalance = settings ? Number(settings.openingBalance) : 0
       for (const t of allTransactions) {
-        if (t.type === "DEPOSIT") {
-          balanceBefore += Number(t.amount)
-        } else {
-          balanceBefore -= Number(t.amount)
-        }
+        currentBalance += t.type === "DEPOSIT" ? Number(t.amount) : -Number(t.amount)
       }
 
       const balanceAfter =
         body.type === "DEPOSIT"
-          ? balanceBefore + body.amount
-          : balanceBefore - body.amount
+          ? currentBalance + body.amount
+          : currentBalance - body.amount
 
       return tx.bankTransaction.create({
         data: {

@@ -40,7 +40,7 @@ export function useBank(): UseBankReturn {
   const fetchTransactions = useCallback(async () => {
     setIsLoading(true)
     setError(null)
-    const result = await api.get<BankData>("/api/bank")
+    const result = await api.get<BankData>("/api/bank", { params: { limit: 0 } })
     if (result.success && result.data) {
       setTransactions(result.data.transactions)
       setSettings(result.data.settings)

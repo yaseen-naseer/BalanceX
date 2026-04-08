@@ -14,6 +14,7 @@ export interface TransactionFormData {
 export interface BankTransactionWithBalance {
   id: string
   date: string | Date
+  createdAt: string | Date
   type: 'DEPOSIT' | 'WITHDRAWAL'
   amount: number | { toString(): string }
   reference: string | null

@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08j'
+const WHATS_NEW_VERSION = '2026-04-08k'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -158,6 +158,13 @@ const CHANGELOG: ChangeGroup[] = [
         title: 'Auto-Logout Redirect Fixed',
         description:
           'Fixed an issue where the idle timeout logout redirected to the wrong port. Session logout now correctly redirects to the login page.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Database className="h-4 w-4 text-blue-500" />,
+        title: 'Bank Ledger Fixes',
+        description:
+          'Transaction balance now uses server-calculated values instead of client-side recalculation. Latest transactions show at the top. Each entry shows the time it was added.',
         tag: 'Fix',
       },
     ],
@@ -370,7 +377,7 @@ export function WhatsNewDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleDismiss() }}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-amber-500" />
