@@ -23,7 +23,11 @@ export const dateStringSchema = z.string().refine(
 export const positiveNumberSchema = z.number()
   .positive("Must be a positive number")
   .min(0.01, "Minimum amount is 0.01 MVR")
-  .refine((v) => Math.round(v * 100) === v * 100, { message: "Maximum 2 decimal places" })
+  .refine((v) => {
+    const str = String(v)
+    const decimal = str.split('.')[1]
+    return !decimal || decimal.length <= 2
+  }, { message: "Maximum 2 decimal places" })
 export const nonNegativeNumberSchema = z.number().min(0, "Cannot be negative")
 
 export const customerTypeSchema = z.enum(["CONSUMER", "CORPORATE"])

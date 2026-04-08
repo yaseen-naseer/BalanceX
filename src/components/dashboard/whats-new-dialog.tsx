@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08k'
+const WHATS_NEW_VERSION = '2026-04-08l'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -165,6 +165,13 @@ const CHANGELOG: ChangeGroup[] = [
         title: 'Bank Ledger Fixes',
         description:
           'Transaction balance now uses server-calculated values instead of client-side recalculation. Latest transactions show at the top. Each entry shows the time it was added.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-orange-500" />,
+        title: 'Decimal Amount Fix',
+        description:
+          'Fixed a floating-point validation bug that rejected valid decimal amounts like 8919.13. All amount fields now accept any value up to 2 decimal places correctly.',
         tag: 'Fix',
       },
     ],
