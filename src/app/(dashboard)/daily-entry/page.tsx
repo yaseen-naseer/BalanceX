@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -57,8 +58,10 @@ import { PresenceBanner } from '@/components/daily-entry/presence-banner'
 import { DailyEntryProvider } from '@/contexts/daily-entry-context'
 
 export default function DailyEntryPage() {
-  const [currentDate, setCurrentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [initialDateResolved, setInitialDateResolved] = useState(false)
+  const searchParams = useSearchParams()
+  const dateFromUrl = searchParams.get('date')
+  const [currentDate, setCurrentDate] = useState(dateFromUrl || format(new Date(), 'yyyy-MM-dd'))
+  const [initialDateResolved, setInitialDateResolved] = useState(!!dateFromUrl)
   const [showVarianceWarning, setShowVarianceWarning] = useState(false)
   const [varianceMessages, setVarianceMessages] = useState<ValidationMessage[]>([])
 

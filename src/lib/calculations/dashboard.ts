@@ -246,7 +246,7 @@ export async function generateAlerts(
       message: `${missingScreenshotDays.length} day(s) missing screenshot`,
       count: missingScreenshotDays.length,
       dates: missingScreenshotDays,
-      link: '/daily-entry',
+      link: '/day-detail',
     })
   }
 
@@ -258,7 +258,7 @@ export async function generateAlerts(
       message: `${unverifiedDays.length} day(s) not verified`,
       count: unverifiedDays.length,
       dates: unverifiedDays,
-      link: '/daily-entry',
+      link: '/day-detail',
     })
   }
 

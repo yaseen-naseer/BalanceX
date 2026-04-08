@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08h'
+const WHATS_NEW_VERSION = '2026-04-08i'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -138,6 +138,20 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Every write operation is now logged — screenshots, imports, cash float, shift settings, discount tiers, and wholesale customer updates all have full audit trails.',
         tag: 'Security',
+      },
+      {
+        icon: <CreditCard className="h-4 w-4 text-emerald-500" />,
+        title: 'Auto Bank Deposit for Transfers',
+        description:
+          'Transfer sales now automatically create a bank deposit. Editing the amount updates the deposit, deleting the sale removes it. These auto-created entries are protected from manual deletion.',
+        tag: 'New',
+      },
+      {
+        icon: <AlertTriangle className="h-4 w-4 text-amber-500" />,
+        title: 'Dashboard Alert Links Fixed',
+        description:
+          'Missing screenshot and unverified alerts now link to the correct date on the Day Detail page instead of the daily entry page.',
+        tag: 'Fix',
       },
     ],
   },

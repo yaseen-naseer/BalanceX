@@ -9,6 +9,7 @@ import { withTransaction } from "@/lib/utils/atomic"
 import { getWalletDeduction, checkWalletSufficiency } from "@/lib/utils/wallet-check"
 import { syncCellTotal } from "@/lib/utils/sync-cell-total"
 import { logError } from "@/lib/logger"
+import { deleteTransferBankDeposit, updateTransferBankDeposit } from "@/lib/utils/sync-transfer-bank"
 
 // PATCH /api/sale-line-items/[id] - Edit a sale line item
 export async function PATCH(
@@ -92,6 +93,15 @@ export async function PATCH(
 
       return { updated: upd, cellTotal: total, cellCount: count }
     })
+
+    // Update linked bank deposit if transfer amount changed
+    if (lineItem.paymentMethod === "TRANSFER" && amount !== undefined && amount !== previousAmount) {
+      try {
+        await updateTransferBankDeposit(id, amount)
+      } catch (bankErr) {
+        logError("Bank sync error on transfer sale edit (non-fatal)", bankErr)
+      }
+    }
 
     await createAuditLog({
       action: "SALE_LINE_ITEM_EDITED",
@@ -221,6 +231,15 @@ export async function DELETE(
 
       return { cellTotal: total, cellCount: count }
     })
+
+    // Delete linked bank deposit for transfer sales
+    if (lineItem.paymentMethod === "TRANSFER") {
+      try {
+        await deleteTransferBankDeposit(id)
+      } catch (bankErr) {
+        logError("Bank sync error on transfer sale delete (non-fatal)", bankErr)
+      }
+    }
 
     await createAuditLog({
       action: "SALE_LINE_ITEM_DELETED",

@@ -11,6 +11,7 @@ import { getWalletDeduction, checkWalletSufficiency } from "@/lib/utils/wallet-c
 import { logError } from "@/lib/logger"
 import { withTransaction } from "@/lib/utils/atomic"
 import { syncCellTotal } from "@/lib/utils/sync-cell-total"
+import { createTransferBankDeposit } from "@/lib/utils/sync-transfer-bank"
 
 // GET /api/sale-line-items?dailyEntryId=xxx
 export async function GET(request: NextRequest) {
@@ -136,6 +137,15 @@ export async function POST(request: NextRequest) {
       throw err
     })
     // Note: wallet error is caught below in the outer catch
+
+    // Auto-create bank deposit for transfer sales
+    if (paymentMethod === "TRANSFER") {
+      try {
+        await createTransferBankDeposit(lineItem.id, amount, dailyEntry.date, category, auth.user!.id)
+      } catch (bankErr) {
+        logError("Bank sync error for transfer sale (non-fatal)", bankErr)
+      }
+    }
 
     await createAuditLog({
       action: "SALE_LINE_ITEM_ADDED",

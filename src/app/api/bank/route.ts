@@ -304,6 +304,14 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // Block deletion of auto-created transfer sale deposits
+    if (transactionToDelete.reference === "Transfer Sale" && transactionToDelete.notes?.startsWith("Auto-created from transfer sale")) {
+      return NextResponse.json(
+        { success: false, error: "This transaction was auto-created from a transfer sale. Delete the sale line item instead." },
+        { status: 400 }
+      )
+    }
+
     // Atomic: delete + recalculate all balances in a single serializable transaction
     await withTransaction(async (tx) => {
       await tx.bankTransaction.delete({

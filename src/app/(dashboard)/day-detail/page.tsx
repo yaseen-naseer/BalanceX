@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -37,7 +38,8 @@ import {
 } from '@/components/day-detail'
 
 export default function DayDetailPage() {
-  const [currentDate, setCurrentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const searchParams = useSearchParams()
+  const [currentDate, setCurrentDate] = useState(() => searchParams.get('date') || format(new Date(), 'yyyy-MM-dd'))
   const { entry, calculationData, isLoading, error, fetchEntry } = useDailyEntry({
     date: currentDate,
   })

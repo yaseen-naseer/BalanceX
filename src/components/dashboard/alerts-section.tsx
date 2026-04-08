@@ -67,7 +67,7 @@ export function AlertsSection({ alerts }: AlertsSectionProps) {
               {alert.dates.map((date) => (
                 <Link
                   key={date}
-                  href={`/daily-entry?date=${date}`}
+                  href={`${alert.link}?date=${date}`}
                   className="flex items-center gap-2 text-sm py-1.5 px-2 rounded hover:bg-muted/50 transition-colors"
                 >
                   <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
