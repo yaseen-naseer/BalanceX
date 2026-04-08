@@ -111,7 +111,7 @@ export function CurrencyInput({
       // Use a microtask to avoid the setState-in-effect warning
       // This is a valid pattern for syncing controlled input state
       const timeoutId = setTimeout(() => {
-        setLocalValue(value === 0 ? "" : value.toString())
+        setLocalValue(value === 0 ? "" : value.toFixed(decimals))
       }, 0)
       return () => clearTimeout(timeoutId)
     }
@@ -221,7 +221,7 @@ export function CurrencyInput({
     onChange(numValue)
 
     if (formatOnBlur) {
-      setLocalValue(numValue === 0 ? "" : numValue.toString())
+      setLocalValue(numValue === 0 ? "" : numValue.toFixed(decimals))
     }
 
     onBlur?.()

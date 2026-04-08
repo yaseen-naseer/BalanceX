@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08n'
+const WHATS_NEW_VERSION = '2026-04-08o'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
