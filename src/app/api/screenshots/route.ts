@@ -84,6 +84,11 @@ export async function POST(request: NextRequest) {
       return errorResponse("No daily entry found for this date", 404)
     }
 
+    // Block replacement of verified screenshots
+    if (dailyEntry.screenshot?.isVerified) {
+      return ApiErrors.badRequest("Cannot replace a verified screenshot")
+    }
+
     // Create uploads directory if it doesn't exist
     const uploadsDir = join(process.cwd(), "public", "uploads", "screenshots")
     if (!existsSync(uploadsDir)) {
@@ -228,6 +233,10 @@ export async function DELETE(request: NextRequest) {
 
     if (!screenshot) {
       return ApiErrors.notFound("Screenshot")
+    }
+
+    if (screenshot.isVerified) {
+      return ApiErrors.badRequest("Cannot delete a verified screenshot")
     }
 
     // Delete the file from disk — validate path stays within public directory

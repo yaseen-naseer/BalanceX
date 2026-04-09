@@ -105,11 +105,12 @@ export default function DailyEntryPage() {
     guard(() => setCurrentDate(date))
   }
 
-  // Check if current user can reopen
+  // Check if current user can reopen (blocked if screenshot is verified)
   const canReopen = useMemo(() => {
     if (!user?.role) return false
+    if (form.entry?.screenshot?.isVerified) return false
     return canReopenDailyEntry(user.role, new Date(currentDate))
-  }, [user, currentDate])
+  }, [user, currentDate, form.entry?.screenshot?.isVerified])
 
   // Get subtitle based on state
   const subtitle = useMemo(() => {
@@ -273,6 +274,11 @@ export default function DailyEntryPage() {
                     'Draft'
                   )}
                 </Badge>
+                {form.entry?.screenshot?.isVerified && (
+                  <Badge className="bg-emerald-600">
+                    <CheckCircle2 className="mr-1 h-3 w-3" /> Verified
+                  </Badge>
+                )}
                 {form.isLive && (
                   <Badge variant="outline" className="gap-1.5 text-xs text-emerald-600 border-emerald-300">
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />

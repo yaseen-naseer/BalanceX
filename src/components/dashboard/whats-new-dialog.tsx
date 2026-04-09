@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09j'
+const WHATS_NEW_VERSION = '2026-04-09k'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -145,6 +145,20 @@ const CHANGELOG: ChangeGroup[] = [
         title: 'Screenshots Available Immediately',
         description:
           'Uploaded screenshots are now served through an API route instead of static files. Images appear immediately after upload without needing a server restart.',
+        tag: 'Fix',
+      },
+      {
+        icon: <ShieldCheck className="h-4 w-4 text-teal-500" />,
+        title: 'Verified Screenshots Are Locked',
+        description:
+          'Once a screenshot is verified, it cannot be replaced, deleted, or unverified. The daily entry cannot be reopened either. Verification now requires a confirmation dialog and shows a "Verified" badge on the daily entry.',
+        tag: 'Security',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Verification Save Fix',
+        description:
+          'Fixed the "Save Verification" button being clickable without agreeing to the verification checkbox. The button is now disabled until the checkbox is ticked, and uses an in-app confirmation dialog instead of a browser prompt for deletions.',
         tag: 'Fix',
       },
     ],

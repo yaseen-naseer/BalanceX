@@ -32,7 +32,6 @@ import {
   ReconciliationCard,
   SalesBreakdown,
   ScreenshotSection,
-  useScreenshotStatus,
   WalletTopupsSection,
   CreditSalesSection,
 } from '@/components/day-detail'
@@ -45,7 +44,8 @@ export default function DayDetailPage() {
   })
   const { user, isOwner } = useAuth()
   const { getTopupsByDate, getTotalTopupsByDate } = useWallet()
-  const { screenshotUploaded, screenshotVerified } = useScreenshotStatus(currentDate)
+  const [screenshotUploaded, setScreenshotUploaded] = useState(false)
+  const [screenshotVerified, setScreenshotVerified] = useState(false)
 
   const canUpload = user?.role === 'OWNER' || user?.role === 'ACCOUNTANT'
   const systemStartDate = useSystemStartDate()
@@ -236,6 +236,10 @@ export default function DayDetailPage() {
               currentDate={currentDate}
               canUpload={canUpload}
               isOwner={isOwner}
+              onStatusChange={({ uploaded, verified }) => {
+                setScreenshotUploaded(uploaded)
+                setScreenshotVerified(verified)
+              }}
             />
           </div>
         )}

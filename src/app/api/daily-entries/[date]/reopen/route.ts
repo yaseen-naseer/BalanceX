@@ -47,6 +47,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return ApiErrors.badRequest('Entry is not submitted')
     }
 
+    // Prevent reopening if screenshot has been verified
+    const screenshot = await prisma.telcoScreenshot.findFirst({
+      where: { dailyEntryId: entry.id, isVerified: true },
+    })
+    if (screenshot) {
+      return ApiErrors.badRequest('Cannot reopen — screenshot has been verified')
+    }
+
     // B9: Prevent reopening if there's already an open (unresubmitted) amendment
     const openAmendment = await prisma.dailyEntryAmendment.findFirst({
       where: { dailyEntryId: entry.id, resubmittedAt: null },

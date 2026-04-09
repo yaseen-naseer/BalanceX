@@ -8,7 +8,7 @@ export type { ReconciliationCardProps } from './reconciliation-card'
 export { SalesBreakdown } from './sales-breakdown'
 export type { SalesBreakdownProps } from './sales-breakdown'
 
-export { ScreenshotSection, useScreenshotStatus } from './screenshot-section'
+export { ScreenshotSection } from './screenshot-section'
 export type { ScreenshotSectionProps } from './screenshot-section'
 
 export { WalletTopupsSection } from './wallet-topups-section'

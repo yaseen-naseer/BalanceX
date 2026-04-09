@@ -28,20 +28,24 @@ import {
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import type { ScreenshotData } from './types'
 
 export interface ScreenshotSectionProps {
   currentDate: string
   canUpload: boolean
   isOwner: boolean
+  onStatusChange?: (status: { uploaded: boolean; verified: boolean }) => void
 }
 
-export function ScreenshotSection({ currentDate, canUpload, isOwner }: ScreenshotSectionProps) {
+export function ScreenshotSection({ currentDate, canUpload, isOwner, onStatusChange }: ScreenshotSectionProps) {
   const api = useApiClient()
   const [screenshot, setScreenshot] = useState<ScreenshotData | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showVerifyConfirm, setShowVerifyConfirm] = useState(false)
   const [showImageModal, setShowImageModal] = useState(false)
   const [verifyNotes, setVerifyNotes] = useState('')
   const [isVerified, setIsVerified] = useState(false)
@@ -53,16 +57,18 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
         setScreenshot(result.data)
         setIsVerified(result.data.isVerified || false)
         setVerifyNotes(result.data.verifyNotes || '')
+        onStatusChange?.({ uploaded: true, verified: result.data.isVerified || false })
       } else {
         setScreenshot(null)
         setIsVerified(false)
         setVerifyNotes('')
+        onStatusChange?.({ uploaded: false, verified: false })
       }
     } catch {
-      // No screenshot for this date — not an error
       setScreenshot(null)
       setIsVerified(false)
       setVerifyNotes('')
+      onStatusChange?.({ uploaded: false, verified: false })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate])
@@ -122,7 +128,8 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
       })
 
       if (result.success) {
-        toast.success(isVerified ? 'Screenshot verified' : 'Verification updated')
+        toast.success('Screenshot verified. This cannot be undone.')
+        setShowVerifyConfirm(false)
         fetchScreenshot()
       } else {
         toast.error('Failed to update verification')
@@ -137,10 +144,6 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
   const handleDelete = async () => {
     if (!screenshot) return
 
-    if (!confirm('Are you sure you want to delete this screenshot? This action cannot be undone.')) {
-      return
-    }
-
     setIsDeleting(true)
     try {
       const result = await api.delete('/api/screenshots', { params: { id: screenshot.id } })
@@ -149,6 +152,8 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
         setScreenshot(null)
         setIsVerified(false)
         setVerifyNotes('')
+        setShowDeleteConfirm(false)
+        onStatusChange?.({ uploaded: false, verified: false })
       } else {
         toast.error(result.error || 'Failed to delete screenshot')
       }
@@ -186,7 +191,7 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
                 isDeleting={isDeleting}
                 onView={() => setShowImageModal(true)}
                 onFileUpload={handleFileUpload}
-                onDelete={handleDelete}
+                onDelete={() => setShowDeleteConfirm(true)}
               />
 
               <Separator />
@@ -199,7 +204,7 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
                 isVerifying={isVerifying}
                 onVerifiedChange={setIsVerified}
                 onNotesChange={setVerifyNotes}
-                onVerify={handleVerify}
+                onVerify={() => setShowVerifyConfirm(true)}
               />
             </>
           )}
@@ -226,6 +231,32 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Verify Confirmation Dialog */}
+      <ConfirmDialog
+        open={showVerifyConfirm}
+        onOpenChange={setShowVerifyConfirm}
+        title="Confirm Verification"
+        description="Once verified, this cannot be undone. The screenshot will be permanently marked as verified."
+        confirmLabel="Verify"
+        variant="default"
+        onConfirm={handleVerify}
+        isLoading={isVerifying}
+        loadingText="Verifying..."
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete Screenshot?"
+        description="Are you sure you want to delete this screenshot? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+        isLoading={isDeleting}
+        loadingText="Deleting..."
+      />
     </>
   )
 }
@@ -336,7 +367,7 @@ function ScreenshotPreview({
       <div className="flex justify-between text-sm text-muted-foreground">
         <span>Uploaded by {screenshot.uploader?.name || 'Unknown'}</span>
         <div className="flex items-center gap-2">
-          {canUpload && (
+          {canUpload && !screenshot.isVerified && (
             <div className="relative">
               <Input
                 type="file"
@@ -350,7 +381,7 @@ function ScreenshotPreview({
               </Button>
             </div>
           )}
-          {isOwner && (
+          {isOwner && !screenshot.isVerified && (
             <Button
               variant="ghost"
               size="sm"
@@ -396,33 +427,55 @@ function VerificationSection({
       <h4 className="font-medium">Verification</h4>
 
       {canUpload ? (
-        <>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="verified"
-              checked={isVerified}
-              onCheckedChange={(checked) => onVerifiedChange(checked as boolean)}
-            />
-            <Label htmlFor="verified">
-              I have verified the manual entry matches the telco report screenshot
-            </Label>
+        screenshot.isVerified ? (
+          // Already verified — show locked state
+          <div className="rounded-lg p-4 bg-emerald-50">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-emerald-700">
+                <CheckCircle2 className="h-5 w-5" />
+                <span className="font-medium">Verified</span>
+              </div>
+              {(screenshot.verifiedBy || screenshot.verifiedAt) && (
+                <p className="text-xs text-emerald-600">
+                  {screenshot.verifiedBy && `By ${screenshot.verifiedBy}`}
+                  {screenshot.verifiedBy && screenshot.verifiedAt && ' on '}
+                  {screenshot.verifiedAt &&
+                    format(new Date(screenshot.verifiedAt), 'dd MMM yyyy, h:mm a')}
+                </p>
+              )}
+              {screenshot.verifyNotes && <p className="mt-2 text-sm">{screenshot.verifyNotes}</p>}
+            </div>
           </div>
+        ) : (
+          // Not yet verified — show form
+          <>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="verified"
+                checked={isVerified}
+                onCheckedChange={(checked) => onVerifiedChange(checked as boolean)}
+              />
+              <Label htmlFor="verified">
+                I have verified the manual entry matches the telco report screenshot
+              </Label>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Verification Notes (optional)</Label>
-            <Textarea
-              id="notes"
-              value={verifyNotes}
-              onChange={(e) => onNotesChange(e.target.value)}
-              placeholder="Add any notes about discrepancies or observations..."
-              rows={2}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Verification Notes (optional)</Label>
+              <Textarea
+                id="notes"
+                value={verifyNotes}
+                onChange={(e) => onNotesChange(e.target.value)}
+                placeholder="Add any notes about discrepancies or observations..."
+                rows={2}
+              />
+            </div>
 
-          <Button onClick={onVerify} disabled={isVerifying} className="w-full">
-            {isVerifying ? 'Saving...' : 'Save Verification'}
-          </Button>
-        </>
+            <Button onClick={onVerify} disabled={isVerifying || !isVerified} className="w-full">
+              {isVerifying ? 'Saving...' : 'Verify Screenshot'}
+            </Button>
+          </>
+        )
       ) : (
         <div
           className={cn(
