@@ -2,8 +2,15 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   AlertDialog,
   AlertDialogContent,
@@ -14,16 +21,15 @@ import {
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import { AlertTriangle, RotateCcw } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 
-const PREDEFINED_REASONS = [
+const REOPEN_REASONS = [
   'Incorrect sales amount',
   'Missing line items',
   'Wrong payment method',
   'Cash float error',
   'Screenshot mismatch',
   'Customer dispute',
-]
+] as const
 
 export interface ReopenDialogProps {
   onReopen: (reason: string) => Promise<boolean>
@@ -32,24 +38,28 @@ export interface ReopenDialogProps {
 
 export function ReopenDialog({ onReopen, isLoading }: ReopenDialogProps) {
   const [open, setOpen] = useState(false)
-  const [reason, setReason] = useState('')
+  const [selectedReason, setSelectedReason] = useState('')
+  const [customReason, setCustomReason] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
+  const finalReason = selectedReason === 'Other' ? customReason.trim() : selectedReason
+
   const handleOpen = () => {
-    setReason('')
+    setSelectedReason('')
+    setCustomReason('')
     setError('')
     setOpen(true)
   }
 
   const handleReopen = async () => {
-    if (reason.trim().length < 3) {
+    if (!finalReason || finalReason.length < 3) {
       setError('Please provide a reason (at least 3 characters)')
       return
     }
     setIsSubmitting(true)
     setError('')
-    const success = await onReopen(reason.trim())
+    const success = await onReopen(finalReason)
     setIsSubmitting(false)
     if (success) {
       setOpen(false)
@@ -84,30 +94,33 @@ export function ReopenDialog({ onReopen, isLoading }: ReopenDialogProps) {
           </AlertDialogHeader>
 
           <div className="space-y-3 py-2">
-            <Label>Quick select</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {PREDEFINED_REASONS.map((r) => (
-                <Badge
-                  key={r}
-                  variant={reason === r ? 'default' : 'outline'}
-                  className="cursor-pointer text-xs"
-                  onClick={() => { setReason(r); setError('') }}
-                >
-                  {r}
-                </Badge>
-              ))}
-            </div>
-            <Label htmlFor="reopen-reason">Reason for reopening</Label>
-            <Textarea
-              id="reopen-reason"
-              placeholder="Or type a custom reason..."
-              value={reason}
-              onChange={(e) => {
-                setReason(e.target.value)
+            <Label>Reason for reopening *</Label>
+            <Select
+              value={selectedReason}
+              onValueChange={(v) => {
+                setSelectedReason(v)
+                if (v !== 'Other') setCustomReason('')
                 setError('')
               }}
-              rows={3}
-            />
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a reason..." />
+              </SelectTrigger>
+              <SelectContent>
+                {REOPEN_REASONS.map((reason) => (
+                  <SelectItem key={reason} value={reason}>{reason}</SelectItem>
+                ))}
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            {selectedReason === 'Other' && (
+              <Input
+                placeholder="Enter reason..."
+                value={customReason}
+                onChange={(e) => { setCustomReason(e.target.value); setError('') }}
+                autoFocus
+              />
+            )}
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}
@@ -118,7 +131,7 @@ export function ReopenDialog({ onReopen, isLoading }: ReopenDialogProps) {
             <Button
               variant="destructive"
               onClick={handleReopen}
-              disabled={isSubmitting || reason.trim().length < 3}
+              disabled={isSubmitting || !finalReason || finalReason.length < 3}
             >
               {isSubmitting ? 'Reopening...' : 'Reopen Entry'}
             </Button>
