@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       data: {
         dailyEntryId: dailyEntry.id,
         filename,
-        filepath: `/uploads/screenshots/${filename}`,
+        filepath: `/api/uploads/screenshots/${filename}`,
         mimeType: file.type,
         fileSize: file.size,
         uploadedBy: session.user.id,
@@ -178,19 +178,23 @@ export async function GET(request: NextRequest) {
     }
 
     const screenshot = dailyEntry.screenshot
+    // Normalize old static paths to API paths
+    const filepath = screenshot.filepath.startsWith("/uploads/")
+      ? screenshot.filepath.replace("/uploads/", "/api/uploads/")
+      : screenshot.filepath
+
     if (screenshot.verifiedBy) {
-      // Look up verifier name
       const verifier = await prisma.user.findUnique({
         where: { id: screenshot.verifiedBy },
         select: { name: true },
       })
       return NextResponse.json({
         success: true,
-        data: { ...screenshot, verifiedBy: verifier?.name || null },
+        data: { ...screenshot, filepath, verifiedBy: verifier?.name || null },
       })
     }
 
-    return NextResponse.json({ success: true, data: screenshot })
+    return NextResponse.json({ success: true, data: { ...screenshot, filepath } })
   } catch (error) {
     logError("Error fetching screenshot", error)
     return ApiErrors.serverError("Failed to fetch screenshot")

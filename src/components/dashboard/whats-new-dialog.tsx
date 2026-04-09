@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09i'
+const WHATS_NEW_VERSION = '2026-04-09j'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -139,6 +139,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'The monthly report daily breakdown now shows the most recent date at the top, so the current day is always visible first.',
         tag: 'Improvement',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Screenshots Available Immediately',
+        description:
+          'Uploaded screenshots are now served through an API route instead of static files. Images appear immediately after upload without needing a server restart.',
+        tag: 'Fix',
       },
     ],
   },
