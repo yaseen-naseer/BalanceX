@@ -49,7 +49,7 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
   const fetchScreenshot = useCallback(async () => {
     try {
       const result = await api.get<ScreenshotData>('/api/screenshots', { params: { date: currentDate } })
-      if (result.success && result.data) {
+      if (result?.success && result.data) {
         setScreenshot(result.data)
         setIsVerified(result.data.isVerified || false)
         setVerifyNotes(result.data.verifyNotes || '')
@@ -58,9 +58,11 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
         setIsVerified(false)
         setVerifyNotes('')
       }
-    } catch (err) {
-      console.error('Error fetching screenshot:', err)
-      toast.error('Failed to load screenshot')
+    } catch {
+      // No screenshot for this date — not an error
+      setScreenshot(null)
+      setIsVerified(false)
+      setVerifyNotes('')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate])

@@ -173,24 +173,24 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    if (!dailyEntry) {
-      return errorResponse("No daily entry found for this date", 404)
+    if (!dailyEntry || !dailyEntry.screenshot) {
+      return NextResponse.json({ success: true, data: null })
     }
 
     const screenshot = dailyEntry.screenshot
-    if (screenshot && screenshot.verifiedBy) {
+    if (screenshot.verifiedBy) {
       // Look up verifier name
       const verifier = await prisma.user.findUnique({
         where: { id: screenshot.verifiedBy },
         select: { name: true },
       })
       return NextResponse.json({
-        ...screenshot,
-        verifiedBy: verifier?.name || null,
+        success: true,
+        data: { ...screenshot, verifiedBy: verifier?.name || null },
       })
     }
 
-    return NextResponse.json(screenshot)
+    return NextResponse.json({ success: true, data: screenshot })
   } catch (error) {
     logError("Error fetching screenshot", error)
     return ApiErrors.serverError("Failed to fetch screenshot")
