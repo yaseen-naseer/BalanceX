@@ -96,9 +96,13 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
     setNotes('')
   }
 
+  const usedMethods = splits.map((s) => s.method)
+
   const addSplit = () => {
     if (splits.length >= 3) return
-    setSplits([...splits, { method: 'Cash', amount: '' }])
+    const available = (['Cash', 'Cheque', 'Transfer'] as const).find((m) => !usedMethods.includes(m))
+    if (!available) return
+    setSplits([...splits, { method: available, amount: '' }])
   }
 
   const removeSplit = (index: number) => {
@@ -321,18 +325,22 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
                       )}
                     </div>
                     <div className="flex gap-2">
-                      {(['Cash', 'Cheque', 'Transfer'] as const).map((m) => (
-                        <Button
-                          key={m}
-                          type="button"
-                          variant={split.method === m ? 'default' : 'outline'}
-                          onClick={() => updateSplit(index, 'method', m)}
-                          className="flex-1"
-                          size="sm"
-                        >
-                          {m}
-                        </Button>
-                      ))}
+                      {(['Cash', 'Cheque', 'Transfer'] as const).map((m) => {
+                        const usedByOther = splits.some((s, i) => i !== index && s.method === m)
+                        return (
+                          <Button
+                            key={m}
+                            type="button"
+                            variant={split.method === m ? 'default' : 'outline'}
+                            onClick={() => updateSplit(index, 'method', m)}
+                            className="flex-1"
+                            size="sm"
+                            disabled={usedByOther}
+                          >
+                            {m}
+                          </Button>
+                        )
+                      })}
                     </div>
                     <Input
                       type="number"
