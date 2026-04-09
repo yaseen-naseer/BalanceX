@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       details: { verified, notes },
     })
 
-    return NextResponse.json(screenshot)
+    return NextResponse.json({ success: true, data: screenshot })
   } catch (error) {
     logError("Error verifying screenshot", error)
     return ApiErrors.serverError("Failed to verify screenshot")

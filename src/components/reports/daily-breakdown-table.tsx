@@ -56,7 +56,7 @@ export function DailyBreakdownTable({ data, isLoading }: DailyBreakdownTableProp
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.dailyBreakdown.map((day) => (
+          {[...data.dailyBreakdown].reverse().map((day) => (
             <TableRow key={day.date}>
               <TableCell>
                 <div>

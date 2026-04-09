@@ -208,7 +208,7 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
 
       {/* Image Modal */}
       <Dialog open={showImageModal} onOpenChange={setShowImageModal}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="!max-w-[90vw] !w-auto max-h-[95vh] !grid-rows-[auto_1fr] overflow-hidden">
           <DialogHeader>
             <DialogTitle>
               Telco Report - {format(new Date(currentDate), 'dd MMM yyyy')}
@@ -216,13 +216,11 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
             <DialogDescription className="sr-only">Full-size telco report screenshot</DialogDescription>
           </DialogHeader>
           {screenshot && (
-            <div className="relative">
-              <Image
+            <div className="overflow-auto max-h-[calc(95vh-5rem)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={screenshot.filepath}
                 alt="Telco report screenshot"
-                width={1200}
-                height={900}
-                className="w-full h-auto"
               />
             </div>
           )}
@@ -328,6 +326,7 @@ function ScreenshotPreview({
           width={400}
           height={300}
           className="w-full h-auto object-contain max-h-64"
+          unoptimized
         />
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity">
           <Eye className="h-8 w-8 text-white" />
