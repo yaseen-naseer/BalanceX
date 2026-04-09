@@ -196,6 +196,7 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   const {
     entry,
     calculationData,
+    previousCashClosing,
     isLoading,
     error,
     fetchEntry,
@@ -218,6 +219,7 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   // --- Form state ---
   const [localData, setLocalData] = useState<LocalEntryData>(createEmptyLocalData())
   const [walletAutoLoaded, setWalletAutoLoaded] = useState(false)
+  const [cashAutoLoaded, setCashAutoLoaded] = useState(false)
   const [hasUserChanges, setHasUserChanges] = useState(false)
   const [walletOpeningSource, setWalletOpeningSource] = useState<string>("PREVIOUS_DAY")
   const [walletOpeningReason, setWalletOpeningReason] = useState<string | null>(null)
@@ -353,6 +355,7 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     setLocalData(entryToLocalData(entry))
     setHasUserChanges(false)
     setWalletAutoLoaded(false)
+    setCashAutoLoaded(false)
     setWalletOpeningSource(entry?.wallet?.openingSource || "PREVIOUS_DAY")
     setWalletOpeningReason(null)
   }, [entry, isLoading])
@@ -385,6 +388,24 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     }
     loadPreviousClosing()
   }, [isLoading, entry, date, getPreviousClosing, walletAutoLoaded, localData.wallet.opening])
+
+  // Auto-load cash drawer opening from previous day's actual closing
+  useEffect(() => {
+    if (isLoading || cashAutoLoaded) return
+    // Only auto-load if opening is still 0 (not yet set by user or saved data)
+    if (localData.cashDrawer.opening !== 0) return
+    // Only auto-load if previous day was submitted and had a closing actual
+    if (previousCashClosing == null || previousCashClosing === 0) return
+
+    setLocalData((prev) => ({
+      ...prev,
+      cashDrawer: { ...prev.cashDrawer, opening: previousCashClosing },
+    }))
+    setCashAutoLoaded(true)
+    if (entry) {
+      setHasUserChanges(true)
+    }
+  }, [isLoading, entry, previousCashClosing, cashAutoLoaded, localData.cashDrawer.opening])
 
   // --- Form field handlers ---
   const handleValueChange = useCallback(

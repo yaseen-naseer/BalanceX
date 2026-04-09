@@ -52,6 +52,11 @@ export function CashDrawerSection({
               onChange={(v) => onFieldChange("cashDrawer.opening", v)}
               disabled={isReadOnly}
             />
+            {cashDrawer.opening > 0 && !isReadOnly && (
+              <p className="text-xs text-muted-foreground">
+                Auto-filled from previous day&apos;s actual closing
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Total Cash Sales</Label>

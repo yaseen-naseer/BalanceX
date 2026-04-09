@@ -14,6 +14,16 @@ import {
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import { AlertTriangle, RotateCcw } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+
+const PREDEFINED_REASONS = [
+  'Incorrect sales amount',
+  'Missing line items',
+  'Wrong payment method',
+  'Cash float error',
+  'Screenshot mismatch',
+  'Customer dispute',
+]
 
 export interface ReopenDialogProps {
   onReopen: (reason: string) => Promise<boolean>
@@ -73,11 +83,24 @@ export function ReopenDialog({ onReopen, isLoading }: ReopenDialogProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <div className="space-y-2 py-2">
+          <div className="space-y-3 py-2">
+            <Label>Quick select</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {PREDEFINED_REASONS.map((r) => (
+                <Badge
+                  key={r}
+                  variant={reason === r ? 'default' : 'outline'}
+                  className="cursor-pointer text-xs"
+                  onClick={() => { setReason(r); setError('') }}
+                >
+                  {r}
+                </Badge>
+              ))}
+            </div>
             <Label htmlFor="reopen-reason">Reason for reopening</Label>
             <Textarea
               id="reopen-reason"
-              placeholder="Describe why this entry needs to be amended..."
+              placeholder="Or type a custom reason..."
               value={reason}
               onChange={(e) => {
                 setReason(e.target.value)

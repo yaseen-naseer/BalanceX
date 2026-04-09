@@ -34,6 +34,7 @@ export interface CalculationData {
 interface UseDailyEntryReturn {
   entry: DailyEntryWithRelations | null
   calculationData: CalculationData
+  previousCashClosing: number | null
   isLoading: boolean
   error: string | null
   fetchEntry: (date: string, options?: { silent?: boolean }) => Promise<void>
@@ -52,6 +53,7 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
   const { date, autoFetch = true } = options
   const [entry, setEntry] = useState<DailyEntryWithRelations | null>(null)
   const [calculationData, setCalculationData] = useState<CalculationData>(defaultCalculationData)
+  const [previousCashClosing, setPreviousCashClosing] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(!!date && autoFetch)
   const [error, setError] = useState<string | null>(null)
   const api = useApiClient()
@@ -67,12 +69,14 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
       const result = await response.json()
 
       if (result.success && result.data) {
-        const { calculationData: calcData, ...entryData } = result.data
+        const { calculationData: calcData, previousCashClosing: prevCash, ...entryData } = result.data
         setEntry(entryData)
         setCalculationData(calcData || defaultCalculationData)
+        setPreviousCashClosing(prevCash ?? null)
       } else if (response.status === 404) {
         setEntry(null)
         setCalculationData(defaultCalculationData)
+        setPreviousCashClosing(null)
       } else if (!options?.silent) {
         setError(result.error || "Failed to fetch entry")
       }
@@ -194,6 +198,7 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
     () => ({
       entry,
       calculationData,
+      previousCashClosing,
       isLoading,
       error,
       fetchEntry,
@@ -202,6 +207,6 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
       submitEntry,
       reopenEntry,
     }),
-    [entry, calculationData, isLoading, error, fetchEntry, createEntry, updateEntry, submitEntry, reopenEntry]
+    [entry, calculationData, previousCashClosing, isLoading, error, fetchEntry, createEntry, updateEntry, submitEntry, reopenEntry]
   )
 }

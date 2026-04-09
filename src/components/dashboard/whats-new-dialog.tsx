@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09f'
+const WHATS_NEW_VERSION = '2026-04-09g'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -97,6 +97,20 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Fixed user reactivation showing a false error, empty email rejecting user creation, and add user form retaining old data after closing. Inactive users are now hidden by default with a toggle to show them.',
         tag: 'Fix',
+      },
+      {
+        icon: <Calculator className="h-4 w-4 text-emerald-500" />,
+        title: 'Auto Opening Cash from Previous Day',
+        description:
+          'When starting a new day, the opening cash is automatically filled from the previous day\'s actual closing balance. The value can still be manually adjusted.',
+        tag: 'New',
+      },
+      {
+        icon: <Pencil className="h-4 w-4 text-sky-500" />,
+        title: 'Reopen Entry: Quick Reasons',
+        description:
+          'When reopening a submitted entry, predefined reasons are available as quick-select badges (e.g., "Incorrect sales amount", "Missing line items"). Custom reasons can still be typed.',
+        tag: 'Improvement',
       },
     ],
   },

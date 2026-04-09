@@ -45,11 +45,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return ApiErrors.notFound('Entry')
     }
 
-    // Get calculation data in parallel
-    const [cashSettlements, walletTopupsFromCash] = await Promise.all([
+    // Get calculation data and previous day's cash closing in parallel
+    const previousDate = new Date(entryDate)
+    previousDate.setDate(previousDate.getDate() - 1)
+
+    const [cashSettlements, walletTopupsFromCash, previousEntry] = await Promise.all([
       getCashSettlements(entryDate),
       getWalletTopupsFromCash(entryDate),
+      prisma.dailyEntry.findUnique({
+        where: { date: previousDate },
+        select: { cashDrawer: { select: { closingActual: true } }, status: true },
+      }),
     ])
+
+    const previousCashClosing = previousEntry?.status === 'SUBMITTED' && previousEntry?.cashDrawer
+      ? Number(previousEntry.cashDrawer.closingActual)
+      : null
 
     // Serialize Decimal values to numbers before sending response
     const serializedEntry = convertPrismaDecimals(entry)
@@ -57,6 +68,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return successResponse({
       ...serializedEntry,
       calculationData: { cashSettlements, walletTopupsFromCash },
+      previousCashClosing,
     })
   } catch (error) {
     logError('Error fetching daily entry', error)
