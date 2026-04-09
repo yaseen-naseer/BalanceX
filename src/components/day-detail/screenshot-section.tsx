@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -210,6 +211,7 @@ export function ScreenshotSection({ currentDate, canUpload, isOwner }: Screensho
             <DialogTitle>
               Telco Report - {format(new Date(currentDate), 'dd MMM yyyy')}
             </DialogTitle>
+            <DialogDescription className="sr-only">Full-size telco report screenshot</DialogDescription>
           </DialogHeader>
           {screenshot && (
             <div className="relative">

@@ -8,6 +8,7 @@ import {
   bankSettingsSchema,
   validateRequestBody,
 } from "@/lib/validations"
+import { monthParamSchema } from "@/lib/validations/schemas"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 import { withTransaction } from "@/lib/utils/atomic"
 import { logError } from "@/lib/logger"
@@ -22,6 +23,16 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get("type") as "DEPOSIT" | "WITHDRAWAL" | null
   const limit = parseInt(searchParams.get("limit") || "50")
   const offset = parseInt(searchParams.get("offset") || "0")
+
+  if (month) {
+    const monthValidation = monthParamSchema.safeParse(month)
+    if (!monthValidation.success) {
+      return NextResponse.json(
+        { success: false, error: "Invalid month format. Expected YYYY-MM" },
+        { status: 400 }
+      )
+    }
+  }
 
   try {
     // Get bank settings (opening balance)

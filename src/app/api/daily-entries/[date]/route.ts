@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getAuthenticatedUser } from '@/lib/api-auth'
+import { getAuthenticatedUser, requirePermission } from '@/lib/api-auth'
+import { PERMISSIONS } from '@/lib/permissions'
 import { canEditDailyEntry } from '@/lib/permissions'
 import { DailyEntryStatus } from '@prisma/client'
 import { validateBeforeSubmit } from '@/lib/validations/daily-entry'
@@ -27,7 +28,7 @@ interface RouteParams {
 
 // GET /api/daily-entries/[date] - Get daily entry by date
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const auth = await getAuthenticatedUser()
+  const auth = await requirePermission(PERMISSIONS.DAILY_ENTRY_VIEW)
   if (auth.error) return auth.error
 
   const { date } = await params

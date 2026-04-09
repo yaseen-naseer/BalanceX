@@ -118,7 +118,7 @@ export async function PUT(
         details: { username: existingUser.username, from: existingUser.role, to: role },
         ipAddress: getClientIpFromRequest(request),
         userAgent: getUserAgentFromRequest(request),
-      })
+      }, { critical: true })
     }
 
     if (isActive === false && existingUser?.isActive) {
@@ -129,7 +129,7 @@ export async function PUT(
         details: { username: existingUser.username },
         ipAddress: getClientIpFromRequest(request),
         userAgent: getUserAgentFromRequest(request),
-      })
+      }, { critical: true })
     }
 
     return NextResponse.json(user)
@@ -179,7 +179,7 @@ export async function DELETE(
       details: { username: targetUser?.username },
       ipAddress: getClientIpFromRequest(request),
       userAgent: getUserAgentFromRequest(request),
-    })
+    }, { critical: true })
 
     return NextResponse.json({ success: true, message: "User deactivated" })
   } catch (error) {

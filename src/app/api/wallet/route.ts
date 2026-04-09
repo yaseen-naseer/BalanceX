@@ -7,6 +7,7 @@ import {
   walletSettingsSchema,
   validateRequestBody,
 } from "@/lib/validations"
+import { monthParamSchema } from "@/lib/validations/schemas"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 import { logError } from "@/lib/logger"
 import { calculateReloadWalletCost } from "@/lib/utils/balance"
@@ -22,6 +23,16 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get("limit") || "50")
   const offset = parseInt(searchParams.get("offset") || "0")
   const previousClosingFor = searchParams.get("previousClosingFor") // Format: YYYY-MM-DD
+
+  if (month) {
+    const monthValidation = monthParamSchema.safeParse(month)
+    if (!monthValidation.success) {
+      return NextResponse.json(
+        { success: false, error: "Invalid month format. Expected YYYY-MM" },
+        { status: 400 }
+      )
+    }
+  }
 
   // If requesting previous day's closing for a specific date
   if (previousClosingFor) {

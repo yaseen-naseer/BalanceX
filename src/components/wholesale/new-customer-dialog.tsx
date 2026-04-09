@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -83,6 +84,7 @@ export function NewCustomerDialog({ onCreated }: NewCustomerDialogProps) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New Wholesale Customer</DialogTitle>
+          <DialogDescription>Enter the new customer details</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">

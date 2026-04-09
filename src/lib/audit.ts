@@ -10,11 +10,19 @@ interface AuditLogData {
   userAgent?: string | null
 }
 
+interface AuditLogOptions {
+  /** When true, audit log failure will propagate and block the calling operation */
+  critical?: boolean
+}
+
 /**
  * Create an audit log entry for sensitive actions.
  * This provides a security audit trail for compliance and investigation.
+ *
+ * When `critical` is true, errors propagate so the calling operation fails
+ * if the audit log cannot be written (use for password changes, role changes, etc.).
  */
-export async function createAuditLog(data: AuditLogData): Promise<void> {
+export async function createAuditLog(data: AuditLogData, options?: AuditLogOptions): Promise<void> {
   try {
     await prisma.auditLog.create({
       data: {
@@ -27,6 +35,9 @@ export async function createAuditLog(data: AuditLogData): Promise<void> {
       },
     })
   } catch (error) {
+    if (options?.critical) {
+      throw error
+    }
     // Log error but don't fail the main operation
     console.error("Failed to create audit log:", error)
   }

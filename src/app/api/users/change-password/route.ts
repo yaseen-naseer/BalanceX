@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       targetId: session.user.id,
       ipAddress: getClientIpFromRequest(request),
       userAgent: getUserAgentFromRequest(request),
-    })
+    }, { critical: true })
 
     return NextResponse.json({ success: true })
   } catch (error) {

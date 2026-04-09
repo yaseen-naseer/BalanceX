@@ -73,6 +73,7 @@ export function SetupWizard() {
     else if (!/[a-z]/.test(form.password)) errs.password = "Must contain a lowercase letter"
     else if (!/[A-Z]/.test(form.password)) errs.password = "Must contain an uppercase letter"
     else if (!/[0-9]/.test(form.password)) errs.password = "Must contain a number"
+    else if (!/[!@#$%^&*]/.test(form.password)) errs.password = "Must contain a special character (!@#$%^&*)"
     if (form.password !== form.confirmPassword) errs.confirmPassword = "Passwords do not match"
     setErrors(errs)
     return Object.keys(errs).length === 0

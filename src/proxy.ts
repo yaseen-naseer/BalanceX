@@ -8,18 +8,22 @@ interface RateLimitEntry {
 
 const rateLimitStore = new Map<string, RateLimitEntry>()
 
-const AUTH_LIMIT = 5
+// Issue #4: Reduced auth limit from 5 to 3 for financial app
+const AUTH_LIMIT = 3
 const AUTH_WINDOW = 60 * 1000
 const API_LIMIT = 100
 const API_WINDOW = 60 * 1000
 
+// Issue #3: Prefer Cloudflare's trusted header over spoofable x-forwarded-for
 function getClientIp(request: NextRequest): string {
+  // cf-connecting-ip is set by Cloudflare Tunnel — cannot be spoofed by the client
+  const cfIp = request.headers.get("cf-connecting-ip")
+  if (cfIp) return cfIp
+  // Fallback for local development
   const forwardedFor = request.headers.get("x-forwarded-for")
   if (forwardedFor) return forwardedFor.split(",")[0].trim()
   const realIp = request.headers.get("x-real-ip")
   if (realIp) return realIp
-  const cfIp = request.headers.get("cf-connecting-ip")
-  if (cfIp) return cfIp
   return "unknown"
 }
 
@@ -68,6 +72,21 @@ export function proxy(request: NextRequest) {
   const isPublicPath = publicPaths.some(
     (path) => pathname === path || pathname.startsWith(path)
   )
+
+  // Issue #2: CSRF — reject cross-origin state-changing requests
+  const mutatingMethods = ["POST", "PUT", "PATCH", "DELETE"]
+  if (mutatingMethods.includes(request.method) && pathname.startsWith("/api") && !pathname.startsWith("/api/auth")) {
+    const origin = request.headers.get("origin")
+    const host = request.headers.get("host")
+    if (origin && host && !origin.includes(host)) {
+      return addSecurityHeaders(
+        NextResponse.json(
+          { success: false, error: "Cross-origin request rejected" },
+          { status: 403 }
+        )
+      )
+    }
+  }
 
   // Rate limit only the sign-in endpoint (brute force protection)
   // Session checks, CSRF, and signout are not rate limited

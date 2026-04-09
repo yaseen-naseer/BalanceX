@@ -3,6 +3,7 @@ import type { UserRole } from "@prisma/client"
 // Permission definitions based on MVP Specification
 export const PERMISSIONS = {
   // Daily Entry
+  DAILY_ENTRY_VIEW: "daily_entry:view",
   DAILY_ENTRY_CREATE: "daily_entry:create",
   DAILY_ENTRY_EDIT_OWN: "daily_entry:edit_own",
   DAILY_ENTRY_EDIT_ANY: "daily_entry:edit_any",
@@ -64,6 +65,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   OWNER: Object.values(PERMISSIONS), // Owner has all permissions
 
   ACCOUNTANT: [
+    PERMISSIONS.DAILY_ENTRY_VIEW,
     PERMISSIONS.DAILY_ENTRY_CREATE,
     PERMISSIONS.DAILY_ENTRY_EDIT_OWN,
     PERMISSIONS.DAILY_ENTRY_EDIT_PAST, // Within 7 days
@@ -95,12 +97,12 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 
   SALES: [
+    PERMISSIONS.DAILY_ENTRY_VIEW,
     PERMISSIONS.DAILY_ENTRY_CREATE,
     PERMISSIONS.DAILY_ENTRY_EDIT_OWN,
     PERMISSIONS.DAILY_ENTRY_SUBMIT,
     PERMISSIONS.CREDIT_CUSTOMER_VIEW,
     PERMISSIONS.CREDIT_SALE_CREATE,
-    PERMISSIONS.WALLET_VIEW, // View only
     PERMISSIONS.REPORTS_VIEW,
     PERMISSIONS.SETTINGS_VIEW,
   ],
@@ -141,7 +143,7 @@ export const NAV_PERMISSIONS: NavItemPermission[] = [
   { href: "/credit", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },
   { href: "/bank", allowedRoles: ["OWNER", "ACCOUNTANT"] },
   { href: "/wholesale-customers", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },
-  { href: "/wallet", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },
+  { href: "/wallet", allowedRoles: ["OWNER", "ACCOUNTANT"] },
   { href: "/reports", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },
   { href: "/settings", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },
   { href: "/profile", allowedRoles: ["OWNER", "ACCOUNTANT", "SALES"] },

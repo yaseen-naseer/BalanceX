@@ -196,6 +196,10 @@ const passwordSchema = z.string()
     (password) => /[0-9]/.test(password),
     { message: "Password must contain at least one number" }
   )
+  .refine(
+    (password) => /[!@#$%^&*]/.test(password),
+    { message: "Password must contain at least one special character (!@#$%^&*)" }
+  )
 
 export const createUserSchema = z.object({
   username: z.string()
@@ -380,6 +384,8 @@ export const importDataSchema = z.object({
 // ============================================
 // Query Parameter Schemas
 // ============================================
+
+export const monthParamSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Invalid month format. Expected YYYY-MM")
 
 export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
-import { getAuthenticatedUser } from "@/lib/api-auth"
+import { getAuthenticatedUser, requirePermission } from "@/lib/api-auth"
+import { PERMISSIONS } from "@/lib/permissions"
 import { canEditDailyEntry } from "@/lib/permissions"
 import { createSaleLineItemSchema, validateRequestBody } from "@/lib/validations"
 import { successResponse, ApiErrors } from "@/lib/api-response"
@@ -15,8 +16,8 @@ import { createTransferBankDeposit } from "@/lib/utils/sync-transfer-bank"
 
 // GET /api/sale-line-items?dailyEntryId=xxx
 export async function GET(request: NextRequest) {
-  const auth = await getAuthenticatedUser()
-  if (!auth.authenticated) return auth.error!
+  const auth = await requirePermission(PERMISSIONS.DAILY_ENTRY_VIEW)
+  if (auth.error) return auth.error
 
   const { searchParams } = new URL(request.url)
   const dailyEntryId = searchParams.get("dailyEntryId")

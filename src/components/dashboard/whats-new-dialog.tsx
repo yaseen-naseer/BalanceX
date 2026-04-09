@@ -4,13 +4,13 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import {
   Sparkles,
@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09b'
+const WHATS_NEW_VERSION = '2026-04-09d'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -69,6 +69,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Wallet top-ups can now be split across up to 3 payment methods (Cash, Cheque, Transfer). All splits share a single reference number and create individual records for accurate tracking.',
         tag: 'New',
+      },
+      {
+        icon: <ShieldCheck className="h-4 w-4 text-teal-500" />,
+        title: 'Security Remediation (All Phases)',
+        description:
+          'CSRF origin validation, hardened rate limiting (3 attempts/min), IP spoofing fix, permission checks on all GET endpoints, atomic bank balance recalculation, CUID validation on bank lookups, wallet restricted to Owner/Accountant, month parameter validation, JWT re-verification reduced to 60s, HSTS header, stronger passwords (special character required), and critical audit logging for sensitive operations.',
+        tag: 'Security',
       },
     ],
   },
@@ -426,15 +433,16 @@ export function WhatsNewDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleDismiss() }}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-        <DialogHeader className="shrink-0">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] !grid-rows-[auto_1fr_auto] overflow-hidden">
+        <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-amber-500" />
             What&apos;s New
           </DialogTitle>
+          <DialogDescription>Latest updates and improvements</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 -mx-6 px-6 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 10rem)' }}>
+        <div className="overflow-y-auto -mx-6 px-6" style={{ maxHeight: 'calc(85vh - 14rem)' }}>
           <div className="space-y-6 py-2">
             {CHANGELOG.map((group, gi) => (
               <div key={gi}>
@@ -468,9 +476,9 @@ export function WhatsNewDialog() {
               </div>
             ))}
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="shrink-0">
+        <DialogFooter>
           <Button onClick={handleDismiss} className="w-full sm:w-auto">
             Got it
           </Button>

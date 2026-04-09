@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
-import { getAuthenticatedUser } from "@/lib/api-auth"
+import { getAuthenticatedUser, requirePermission } from "@/lib/api-auth"
+import { PERMISSIONS } from "@/lib/permissions"
 import { successResponse, ApiErrors } from "@/lib/api-response"
 import { logError } from "@/lib/logger"
 
@@ -12,7 +13,7 @@ const PRESENCE_TTL_MS = 30_000 // 30 seconds — 3 missed polls = gone
 
 // GET /api/daily-entries/[date]/poll - Lightweight check for changes + presence heartbeat
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const auth = await getAuthenticatedUser()
+  const auth = await requirePermission(PERMISSIONS.DAILY_ENTRY_VIEW)
   if (auth.error) return auth.error
 
   const { date } = await params

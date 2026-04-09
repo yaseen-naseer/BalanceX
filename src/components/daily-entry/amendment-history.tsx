@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -125,6 +126,7 @@ function DiffDialog({ amendment, index, open, onClose }: DiffDialogProps) {
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Amendment #{index + 1} – Changes</DialogTitle>
+          <DialogDescription>Changes made during this amendment</DialogDescription>
         </DialogHeader>
 
         {!after ? (

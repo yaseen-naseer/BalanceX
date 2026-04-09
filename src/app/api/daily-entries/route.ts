@@ -10,7 +10,7 @@ import { logError } from "@/lib/logger"
 
 // GET /api/daily-entries - List daily entries
 export async function GET(request: NextRequest) {
-  const auth = await getAuthenticatedUser()
+  const auth = await requirePermission(PERMISSIONS.DAILY_ENTRY_VIEW)
   if (auth.error) return auth.error
 
   const { searchParams } = new URL(request.url)

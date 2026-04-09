@@ -184,7 +184,7 @@ export const authOptions: NextAuthOptions = {
       // Check at most once every 5 minutes to avoid hitting DB on every request
       const now = Math.floor(Date.now() / 1000)
       const lastVerified = (token.lastVerified as number) || 0
-      if (now - lastVerified > 300) {
+      if (now - lastVerified > 60) {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: token.id },
