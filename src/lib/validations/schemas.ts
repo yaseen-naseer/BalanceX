@@ -207,14 +207,14 @@ export const createUserSchema = z.object({
     .max(30, "Username too long")
     .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
   name: z.string().min(1, "Name is required").max(100, "Name too long"),
-  email: z.string().email("Invalid email").optional().nullable(),
+  email: z.preprocess((val) => (val === "" ? undefined : val), z.string().email("Invalid email").optional().nullable()),
   password: passwordSchema,
   role: userRoleSchema,
 })
 
 export const updateUserSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  email: z.string().email().optional().nullable(),
+  email: z.preprocess((val) => (val === "" ? undefined : val), z.string().email().optional().nullable()),
   role: userRoleSchema.optional(),
   isActive: z.boolean().optional(),
   password: passwordSchema.optional(),
