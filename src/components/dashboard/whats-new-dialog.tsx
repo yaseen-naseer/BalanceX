@@ -53,7 +53,7 @@ interface ChangeGroup {
 
 const CHANGELOG: ChangeGroup[] = [
   {
-    version: 'v0.7',
+    version: 'v0.7-beta',
     date: 'April 9, 2026',
     items: [
       {
