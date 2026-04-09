@@ -62,6 +62,7 @@ export function AddLineItemPopover({
 
   const isWholesaleReload = categoryKey === "WHOLESALE_RELOAD"
   const isRetailReload = categoryKey === "RETAIL_RELOAD"
+  const [retailMode, setRetailMode] = useState<"cash" | "reload">("cash")
   const selectedCustomer = wholesaleCustomers?.find((c) => c.id === selectedCustomerId)
 
   // Wholesale calculator: derive discount and reload from cash amount
@@ -78,6 +79,7 @@ export function AddLineItemPopover({
     setCashAmount("")
     setServiceNumber("")
     setNote("")
+    setRetailMode("cash")
     setSelectedCustomerId(null)
     setShowNewCustomerForm(false)
     setNewCustomerName("")
@@ -154,16 +156,19 @@ export function AddLineItemPopover({
         setIsAdding(false)
       }
     } else {
-      // Non-wholesale: use plain amount
+      // Non-wholesale: use plain amount (for retail reload in "reload" mode, convert to cash received)
       const numAmount = parseFloat(amount)
       if (!numAmount || numAmount <= 0) {
         toast.error("Enter a valid amount")
         return
       }
+      const saleAmount = isRetailReload && retailMode === "reload"
+        ? Math.round(numAmount * GST_MULTIPLIER * 100) / 100
+        : Math.round(numAmount * 100) / 100
       setIsAdding(true)
       try {
         const success = await onAdd(
-          Math.round(numAmount * 100) / 100,
+          saleAmount,
           serviceNumber || undefined,
           note || undefined
         )
@@ -339,11 +344,70 @@ export function AddLineItemPopover({
                   </div>
                 )}
               </>
+            ) : isRetailReload ? (
+              <div className="space-y-2">
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    variant={retailMode === "cash" ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1 h-7 text-xs"
+                    onClick={() => { setRetailMode("cash"); setAmount("") }}
+                  >
+                    Cash Received
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={retailMode === "reload" ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1 h-7 text-xs"
+                    onClick={() => { setRetailMode("reload"); setAmount("") }}
+                  >
+                    Reload Amount
+                  </Button>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {retailMode === "cash" ? "Cash Received *" : "Reload Amount *"}
+                  </label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => {
+                      if (e.target.value === "" || /^\d*\.?\d*$/.test(e.target.value)) {
+                        setAmount(e.target.value)
+                      }
+                    }}
+                    placeholder="0.00"
+                    className="h-8 text-sm font-mono"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === "Enter") handleAdd() }}
+                  />
+                </div>
+                {parseFloat(amount) > 0 && (
+                  <div className="rounded-md bg-muted/50 p-2 space-y-1">
+                    {retailMode === "cash" ? (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Customer gets (excl. 8% GST)</span>
+                        <span className="font-mono font-semibold text-primary">
+                          {fmtCurrency(Math.round((parseFloat(amount) / GST_MULTIPLIER) * 100) / 100)} MVR
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Cash to collect (incl. 8% GST)</span>
+                        <span className="font-mono font-semibold text-primary">
+                          {fmtCurrency(Math.round(parseFloat(amount) * GST_MULTIPLIER * 100) / 100)} MVR
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             ) : (
               <div>
-                <label className="text-xs font-medium text-muted-foreground">
-                  {isRetailReload ? "Cash Received *" : "Amount *"}
-                </label>
+                <label className="text-xs font-medium text-muted-foreground">Amount *</label>
                 <Input
                   type="text"
                   inputMode="decimal"
@@ -355,19 +419,9 @@ export function AddLineItemPopover({
                   }}
                   placeholder="0.00"
                   className="h-8 text-sm font-mono"
-                  autoFocus={!isWholesaleReload}
+                  autoFocus
                   onKeyDown={(e) => { if (e.key === "Enter") handleAdd() }}
                 />
-                {isRetailReload && parseFloat(amount) > 0 && (
-                  <div className="rounded-md bg-muted/50 p-2 mt-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Customer gets (excl. 8% GST)</span>
-                      <span className="font-mono font-semibold text-primary">
-                        {fmtCurrency(Math.round((parseFloat(amount) / GST_MULTIPLIER) * 100) / 100)} MVR
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
             <div>

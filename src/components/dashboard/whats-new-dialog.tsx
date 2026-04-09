@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-08q'
+const WHATS_NEW_VERSION = '2026-04-09a'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -51,6 +51,19 @@ interface ChangeGroup {
 }
 
 const CHANGELOG: ChangeGroup[] = [
+  {
+    version: 'v0.7',
+    date: 'April 9, 2026',
+    items: [
+      {
+        icon: <Wallet className="h-4 w-4 text-emerald-500" />,
+        title: 'Retail Reload: Two Input Modes',
+        description:
+          'Retail reload sales now support two modes — enter "Cash Received" to see the reload amount, or enter "Reload Amount" to see the cash to collect. Toggle between them in the popover.',
+        tag: 'New',
+      },
+    ],
+  },
   {
     version: 'v0.6',
     date: 'April 8, 2026',
