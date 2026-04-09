@@ -117,7 +117,7 @@ export function CategoryTable({
                     <th
                       key={`${ct.key}-${pm.key}`}
                       className={cn(
-                        "p-1 text-center text-xs font-medium",
+                        "p-2 text-center text-xs font-medium",
                         pm.color,
                         ct.key === "consumer" && pm.key === "cash" && "border-l"
                       )}
@@ -197,16 +197,20 @@ export function CategoryTable({
                             )}
                           >
                             {notAllowed ? (
-                              <div className="h-8 w-24 flex items-center justify-center text-muted-foreground text-sm bg-muted/40 rounded-md">
-                                —
+                              <div className="flex justify-center w-full">
+                                <div className="h-8 w-24 flex items-center justify-center text-muted-foreground text-sm bg-muted/40 rounded-md">
+                                  —
+                                </div>
                               </div>
                             ) : isAutoCredit ? (
-                              <div className="h-8 w-24 flex items-center justify-end px-2 text-sm font-mono text-muted-foreground bg-muted/40 rounded-md border border-dashed">
-                                {fmtCurrency((localData.categories[category.key][key] as number) || 0)}
+                              <div className="flex justify-center w-full">
+                                <div className="h-8 w-24 flex items-center justify-end px-2 text-sm font-mono text-muted-foreground bg-muted/40 rounded-md border border-dashed">
+                                  {fmtCurrency((localData.categories[category.key][key] as number) || 0)}
+                                </div>
                               </div>
                             ) : (
                               /* Read-only total + add button */
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center justify-center gap-1 w-full">
                                 <div className={cn(
                                   "h-8 w-24 flex items-center justify-end px-2 text-sm font-mono rounded-md",
                                   cellHasLineItems
@@ -279,7 +283,7 @@ export function CategoryTable({
                       <td
                         key={`total-${ct.key}-${pm.key}`}
                         className={cn(
-                          "p-2 text-right font-mono",
+                          "p-2 text-center font-mono",
                           pm.color,
                           ct.key === "consumer" && pmIndex === 0 && "border-l"
                         )}
