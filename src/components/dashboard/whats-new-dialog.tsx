@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09h'
+const WHATS_NEW_VERSION = '2026-04-09i'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -118,6 +118,27 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Wallet top-ups can now be edited or deleted while the daily entry is still a draft. Single payments can be edited directly. Split payments are deleted as a group — all splits are removed together. A reason is required for deletions.',
         tag: 'New',
+      },
+      {
+        icon: <Wallet className="h-4 w-4 text-blue-500" />,
+        title: 'No Duplicate Methods in Splits',
+        description:
+          'Split payments now enforce unique payment methods — each method (Cash, Cheque, Transfer) can only be used once per split. Already-used methods are disabled.',
+        tag: 'Improvement',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Screenshot Preview & Verification Fix',
+        description:
+          'Screenshot preview now auto-sizes to the image instead of a fixed width. Fixed a production error when loading screenshots and a false "failed to verify" error when saving verification.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Database className="h-4 w-4 text-indigo-500" />,
+        title: 'Daily Breakdown: Latest First',
+        description:
+          'The monthly report daily breakdown now shows the most recent date at the top, so the current day is always visible first.',
+        tag: 'Improvement',
       },
     ],
   },
