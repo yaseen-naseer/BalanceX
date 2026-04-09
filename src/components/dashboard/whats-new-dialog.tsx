@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09e'
+const WHATS_NEW_VERSION = '2026-04-09f'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -89,6 +89,13 @@ const CHANGELOG: ChangeGroup[] = [
         title: 'Screenshot Fetch Fix',
         description:
           'Fixed a crash on the Day Detail page when no daily entry or screenshot exists for the selected date.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Users className="h-4 w-4 text-blue-500" />,
+        title: 'User Management Fixes',
+        description:
+          'Fixed user reactivation showing a false error, empty email rejecting user creation, and add user form retaining old data after closing. Inactive users are now hidden by default with a toggle to show them.',
         tag: 'Fix',
       },
     ],
