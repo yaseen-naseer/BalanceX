@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09g'
+const WHATS_NEW_VERSION = '2026-04-09h'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -111,6 +111,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'When reopening a submitted entry, predefined reasons are available as quick-select badges (e.g., "Incorrect sales amount", "Missing line items"). Custom reasons can still be typed.',
         tag: 'Improvement',
+      },
+      {
+        icon: <Wallet className="h-4 w-4 text-emerald-500" />,
+        title: 'Edit & Delete Wallet Top-ups',
+        description:
+          'Wallet top-ups can now be edited or deleted while the daily entry is still a draft. Single payments can be edited directly. Split payments are deleted as a group — all splits are removed together. A reason is required for deletions.',
+        tag: 'New',
       },
     ],
   },

@@ -373,6 +373,8 @@ export default function DailyEntryPage() {
                 onFieldChange={form.handleFieldChange}
                 onOverrideWalletOpening={form.overrideWalletOpening}
                 onRefreshWallet={form.refreshWallet}
+                onDeleteTopup={form.deleteTopup}
+                onEditTopup={form.editTopup}
               />
 
               {/* Cash Reconciliation */}

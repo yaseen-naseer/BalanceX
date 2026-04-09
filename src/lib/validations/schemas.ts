@@ -169,6 +169,7 @@ export const createWalletTopupSchema = z.object({
   source: walletSourceSchema,
   notes: z.string().max(500).optional().nullable(),
   date: dateStringSchema,
+  splitGroupId: z.string().max(50).optional().nullable(),
 })
 
 export const walletSettingsSchema = z.object({

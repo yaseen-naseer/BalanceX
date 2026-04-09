@@ -134,7 +134,7 @@ export interface UseDailyEntryFormReturn {
   variance: VarianceData
 
   // Wallet data
-  dayTopups: Array<{ id: string; amount: number; source: string; notes?: string | null }>
+  dayTopups: Array<{ id: string; amount: number; paidAmount?: number; source: string; notes?: string | null; splitGroupId?: string | null }>
   totalTopups: number
   reloadSalesTotal: number
 
@@ -188,6 +188,8 @@ export interface UseDailyEntryFormReturn {
   validateBeforeSubmit: () => ValidationResult
   refreshEntry: () => Promise<void>
   refreshWallet: () => void
+  deleteTopup: (id: string) => Promise<boolean>
+  editTopup: (id: string, data: { amount: number; paidAmount?: number; source: string; notes?: string }) => Promise<boolean>
   reopenEntry: (reason: string) => Promise<boolean>
 }
 
@@ -211,7 +213,9 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     fetchWallet,
     getTotalTopupsByDate,
     getTopupsByDate,
-    getPreviousClosing
+    getPreviousClosing,
+    editTopup,
+    deleteTopup,
   } = useWallet()
 
   const { user } = useAuth()
@@ -247,8 +251,10 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     () => getTopupsByDate(date).map(t => ({
       id: t.id,
       amount: Number(t.amount),
+      paidAmount: t.paidAmount ? Number(t.paidAmount) : undefined,
       source: t.source,
       notes: t.notes,
+      splitGroupId: t.splitGroupId,
     })),
     [getTopupsByDate, date, topups]
   )
@@ -529,6 +535,8 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     validateBeforeSubmit,
     refreshEntry,
     refreshWallet,
+    deleteTopup,
+    editTopup,
     reopenEntry,
   }
 }

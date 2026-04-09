@@ -323,19 +323,21 @@ enum WalletTopupSource {
 }
 
 model WalletTopup {
-  id         String            @id @default(cuid())
-  amount     Decimal           @db.Decimal(12, 2) // Reload value (wallet credit)
-  paidAmount Decimal?          @db.Decimal(12, 2) // Actual amount paid to Dhiraagu
-  source     WalletTopupSource
-  notes      String?           @db.Text
-  date       DateTime          @db.Date
-  createdBy  String
-  createdAt  DateTime          @default(now())
+  id           String            @id @default(cuid())
+  amount       Decimal           @db.Decimal(12, 2) // Reload value (wallet credit)
+  paidAmount   Decimal?          @db.Decimal(12, 2) // Actual amount paid to Dhiraagu
+  source       WalletTopupSource
+  notes        String?           @db.Text
+  date         DateTime          @db.Date
+  splitGroupId String?           // Shared ID for split payments (null = single payment)
+  createdBy    String
+  createdAt    DateTime          @default(now())
 
   // Relation
   user User @relation(fields: [createdBy], references: [id], onDelete: Restrict)
 
   @@index([date])
+  @@index([splitGroupId])
   @@map("wallet_topups")
 }
 
@@ -434,6 +436,7 @@ enum AuditAction {
   BANK_TRANSACTION_ADDED
   BANK_TRANSACTION_DELETED
   WALLET_TOPUP_ADDED
+  WALLET_TOPUP_EDITED
   WALLET_TOPUP_DELETED
   USER_CREATED
   USER_DEACTIVATED

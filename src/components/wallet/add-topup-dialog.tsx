@@ -130,6 +130,7 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
       setIsSubmitting(true)
       try {
         // Create one top-up per split, each with proportional reload value
+        const groupId = crypto.randomUUID()
         const refPart = splitReference.trim() ? ` (Ref: ${splitReference.trim()})` : ''
         for (const split of splits) {
           const splitPaid = parseFloat(split.amount)
@@ -144,6 +145,7 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
             paidAmount: splitPaid,
             source,
             notes: fullNotes,
+            splitGroupId: groupId,
           })
 
           if (!result) {

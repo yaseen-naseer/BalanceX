@@ -26,6 +26,7 @@ interface UseWalletReturn {
   error: string | null
   fetchWallet: () => Promise<void>
   addTopup: (data: CreateWalletTopupDto) => Promise<WalletTopup | null>
+  editTopup: (id: string, data: { amount: number; paidAmount?: number; source: string; notes?: string }) => Promise<boolean>
   deleteTopup: (id: string) => Promise<boolean>
   setOpeningBalance: (balance: number) => Promise<boolean>
   getTopupsByDate: (date: string) => WalletTopup[]
@@ -70,6 +71,18 @@ export function useWallet(): UseWalletReturn {
     setError(result.error || "Failed to add top-up")
     setIsLoading(false)
     return null
+  }, [api, fetchWallet])
+
+  const editTopup = useCallback(async (
+    id: string,
+    data: { amount: number; paidAmount?: number; source: string; notes?: string }
+  ): Promise<boolean> => {
+    const result = await api.put("/api/wallet", { id, ...data })
+    if (result.success) {
+      await fetchWallet()
+      return true
+    }
+    return false
   }, [api, fetchWallet])
 
   const deleteTopup = useCallback(async (id: string): Promise<boolean> => {
@@ -137,6 +150,7 @@ export function useWallet(): UseWalletReturn {
       error,
       fetchWallet,
       addTopup,
+      editTopup,
       deleteTopup,
       setOpeningBalance,
       getTopupsByDate,
@@ -152,6 +166,7 @@ export function useWallet(): UseWalletReturn {
       error,
       fetchWallet,
       addTopup,
+      editTopup,
       deleteTopup,
       setOpeningBalance,
       getTopupsByDate,

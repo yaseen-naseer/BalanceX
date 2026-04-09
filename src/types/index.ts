@@ -200,6 +200,7 @@ export interface CreateWalletTopupDto {
   source: "CASH" | "BANK"
   notes?: string
   date: string // ISO date string
+  splitGroupId?: string
 }
 
 // Sale Line Item types

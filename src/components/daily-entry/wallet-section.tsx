@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle2, AlertTriangle, Info, Pencil } from "lucide-react"
+import { CheckCircle2, AlertTriangle, Info, Pencil, Trash2, ChevronDown, ChevronRight } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -30,11 +30,28 @@ const OVERRIDE_REASONS = [
   "Correcting data entry error",
 ] as const
 
+const DELETE_REASONS = [
+  "Wrong amount entered",
+  "Duplicate top-up",
+  "Wrong payment method",
+  "Top-up was reversed",
+  "Data entry error",
+] as const
+
+interface TopupItem {
+  id: string
+  amount: number
+  paidAmount?: number
+  source: string
+  notes?: string | null
+  splitGroupId?: string | null
+}
+
 export interface WalletSectionProps {
   wallet: WalletData
   reloadSalesTotal: number
   variance: VarianceData
-  dayTopups: Array<{ id: string; amount: number; source: string; notes?: string | null }>
+  dayTopups: TopupItem[]
   totalTopups: number
   currentDate: string
   isReadOnly: boolean
@@ -43,6 +60,49 @@ export interface WalletSectionProps {
   onFieldChange: (field: string, value: number | string) => void
   onOverrideWalletOpening: (amount: number, reason: string) => void
   onRefreshWallet: () => void
+  onDeleteTopup?: (id: string) => Promise<boolean>
+  onEditTopup?: (id: string, data: { amount: number; paidAmount?: number; source: string; notes?: string }) => Promise<boolean>
+}
+
+interface TopupGroup {
+  type: "single" | "split"
+  items: TopupItem[]
+  totalAmount: number
+  totalPaid: number
+  splitGroupId: string | null
+}
+
+function groupTopups(topups: TopupItem[]): TopupGroup[] {
+  const groups: TopupGroup[] = []
+  const splitMap = new Map<string, TopupItem[]>()
+
+  for (const t of topups) {
+    if (t.splitGroupId) {
+      const existing = splitMap.get(t.splitGroupId) || []
+      existing.push(t)
+      splitMap.set(t.splitGroupId, existing)
+    } else {
+      groups.push({
+        type: "single",
+        items: [t],
+        totalAmount: t.amount,
+        totalPaid: t.paidAmount || t.amount,
+        splitGroupId: null,
+      })
+    }
+  }
+
+  for (const [groupId, items] of splitMap) {
+    groups.push({
+      type: "split",
+      items,
+      totalAmount: items.reduce((s, t) => s + t.amount, 0),
+      totalPaid: items.reduce((s, t) => s + (t.paidAmount || t.amount), 0),
+      splitGroupId: groupId,
+    })
+  }
+
+  return groups
 }
 
 /**
@@ -62,14 +122,34 @@ export function WalletSection({
   onFieldChange,
   onOverrideWalletOpening,
   onRefreshWallet,
+  onDeleteTopup,
+  onEditTopup,
 }: WalletSectionProps) {
   const [showOverride, setShowOverride] = useState(false)
   const [overrideAmount, setOverrideAmount] = useState("")
   const [overrideReason, setOverrideReason] = useState("")
   const [overrideCustomReason, setOverrideCustomReason] = useState("")
 
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<TopupGroup | null>(null)
+  const [deleteReason, setDeleteReason] = useState("")
+  const [deleteCustomReason, setDeleteCustomReason] = useState("")
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Edit state
+  const [editTarget, setEditTarget] = useState<TopupItem | null>(null)
+  const [editAmount, setEditAmount] = useState("")
+  const [editPaidAmount, setEditPaidAmount] = useState("")
+  const [editSource, setEditSource] = useState("")
+  const [editNotes, setEditNotes] = useState("")
+  const [isEditing, setIsEditing] = useState(false)
+
+  // Expand split groups
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+
   const isManual = walletOpeningSource === "MANUAL"
   const finalReason = overrideReason === "Other" ? overrideCustomReason.trim() : overrideReason
+  const finalDeleteReason = deleteReason === "Other" ? deleteCustomReason.trim() : deleteReason
 
   const openOverrideDialog = () => {
     setOverrideAmount(wallet.opening.toString())
@@ -84,6 +164,59 @@ export function WalletSection({
     onOverrideWalletOpening(amount, finalReason)
     setShowOverride(false)
   }
+
+  const openEditDialog = (item: TopupItem) => {
+    setEditTarget(item)
+    setEditAmount(item.amount.toString())
+    setEditPaidAmount(item.paidAmount?.toString() || item.amount.toString())
+    setEditSource(item.source)
+    setEditNotes(item.notes || "")
+    setIsEditing(false)
+  }
+
+  const handleConfirmEdit = async () => {
+    if (!editTarget || !onEditTopup) return
+    const amount = parseFloat(editAmount)
+    const paidAmount = parseFloat(editPaidAmount)
+    if (isNaN(amount) || amount <= 0) return
+    setIsEditing(true)
+    const success = await onEditTopup(editTarget.id, {
+      amount,
+      paidAmount: isNaN(paidAmount) ? undefined : paidAmount,
+      source: editSource,
+      notes: editNotes,
+    })
+    setIsEditing(false)
+    if (success) {
+      setEditTarget(null)
+      onRefreshWallet()
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || !onDeleteTopup) return
+    setIsDeleting(true)
+    // Delete using the first item's ID — API handles group deletion
+    const success = await onDeleteTopup(deleteTarget.items[0].id)
+    setIsDeleting(false)
+    if (success) {
+      setDeleteTarget(null)
+      setDeleteReason("")
+      setDeleteCustomReason("")
+      onRefreshWallet()
+    }
+  }
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupId)) next.delete(groupId)
+      else next.add(groupId)
+      return next
+    })
+  }
+
+  const topupGroups = groupTopups(dayTopups)
 
   return (
     <Card>
@@ -136,20 +269,27 @@ export function WalletSection({
           </div>
         </div>
 
-        {dayTopups.length > 0 && (
+        {topupGroups.length > 0 && (
           <div className="rounded-lg border p-3 space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Top-up History</p>
-            {dayTopups.map((t) => (
-              <div key={t.id} className="flex items-center justify-between text-sm">
-                <div>
-                  <span className="font-mono font-medium">{fmtCurrency(Number(t.amount))} {CURRENCY_CODE}</span>
-                  {t.notes && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{t.notes}</p>
-                  )}
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  {t.source}
-                </Badge>
+            {topupGroups.map((group, gi) => (
+              <div key={group.splitGroupId || `single-${gi}`}>
+                {group.type === "single" ? (
+                  <SingleTopupRow
+                    item={group.items[0]}
+                    isReadOnly={isReadOnly}
+                    onEdit={onEditTopup ? () => openEditDialog(group.items[0]) : undefined}
+                    onDelete={onDeleteTopup ? () => { setDeleteTarget(group); setDeleteReason(""); setDeleteCustomReason("") } : undefined}
+                  />
+                ) : (
+                  <SplitTopupGroup
+                    group={group}
+                    isReadOnly={isReadOnly}
+                    expanded={expandedGroups.has(group.splitGroupId!)}
+                    onToggle={() => toggleGroup(group.splitGroupId!)}
+                    onDelete={onDeleteTopup ? () => { setDeleteTarget(group); setDeleteReason(""); setDeleteCustomReason("") } : undefined}
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -311,6 +451,226 @@ export function WalletSection({
           </div>
         </div>
       </ConfirmDialog>
+
+      {/* Delete Top-up Dialog */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title={deleteTarget?.type === "split" ? "Delete Split Payment?" : "Delete Top-up?"}
+        description={
+          deleteTarget?.type === "split"
+            ? `This will remove all ${deleteTarget.items.length} splits (total ${fmtCurrency(deleteTarget.totalAmount)} MVR reload).`
+            : deleteTarget
+              ? `Remove the ${fmtCurrency(deleteTarget.totalAmount)} MVR reload top-up?`
+              : ""
+        }
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        loadingText="Deleting..."
+        disableConfirm={!finalDeleteReason}
+      >
+        <div className="space-y-3">
+          {deleteTarget?.type === "split" && (
+            <div className="rounded-lg border p-2 space-y-1 text-sm">
+              {deleteTarget.items.map((t) => (
+                <div key={t.id} className="flex justify-between">
+                  <span>{t.source} — {fmtCurrency(t.amount)} MVR</span>
+                  {t.paidAmount && t.paidAmount !== t.amount && (
+                    <span className="text-muted-foreground">(paid {fmtCurrency(t.paidAmount)})</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <Label>Reason for deletion *</Label>
+          <Select
+            value={deleteReason}
+            onValueChange={(v) => {
+              setDeleteReason(v)
+              if (v !== "Other") setDeleteCustomReason("")
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a reason..." />
+            </SelectTrigger>
+            <SelectContent>
+              {DELETE_REASONS.map((reason) => (
+                <SelectItem key={reason} value={reason}>{reason}</SelectItem>
+              ))}
+              <SelectItem value="Other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+          {deleteReason === "Other" && (
+            <Input
+              placeholder="Enter reason..."
+              value={deleteCustomReason}
+              onChange={(e) => setDeleteCustomReason(e.target.value)}
+              autoFocus
+            />
+          )}
+        </div>
+      </ConfirmDialog>
+
+      {/* Edit Top-up Dialog */}
+      <ConfirmDialog
+        open={!!editTarget}
+        onOpenChange={(open) => { if (!open) setEditTarget(null) }}
+        title="Edit Top-up"
+        description="Update the top-up details."
+        confirmLabel="Save"
+        variant="default"
+        onConfirm={handleConfirmEdit}
+        isLoading={isEditing}
+        loadingText="Saving..."
+        disableConfirm={!editAmount || parseFloat(editAmount) <= 0}
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Reload Amount (MVR) *</Label>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={editAmount}
+              onChange={(e) => {
+                if (e.target.value === "" || /^\d*\.?\d*$/.test(e.target.value)) {
+                  setEditAmount(e.target.value)
+                }
+              }}
+              placeholder="0.00"
+              className="font-mono"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Paid Amount (MVR)</Label>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={editPaidAmount}
+              onChange={(e) => {
+                if (e.target.value === "" || /^\d*\.?\d*$/.test(e.target.value)) {
+                  setEditPaidAmount(e.target.value)
+                }
+              }}
+              placeholder="0.00"
+              className="font-mono"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Payment Method</Label>
+            <div className="flex gap-2">
+              {(["CASH", "BANK"] as const).map((s) => (
+                <Button
+                  key={s}
+                  type="button"
+                  variant={editSource === s ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setEditSource(s)}
+                >
+                  {s === "CASH" ? "Cash" : "Bank"}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Input
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="Optional notes..."
+            />
+          </div>
+        </div>
+      </ConfirmDialog>
     </Card>
+  )
+}
+
+function SingleTopupRow({
+  item,
+  isReadOnly,
+  onEdit,
+  onDelete,
+}: {
+  item: TopupItem
+  isReadOnly: boolean
+  onEdit?: () => void
+  onDelete?: () => void
+}) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <div>
+        <span className="font-mono font-medium">{fmtCurrency(item.amount)} {CURRENCY_CODE}</span>
+        {item.notes && (
+          <p className="text-xs text-muted-foreground mt-0.5">{item.notes}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-1">
+        <Badge variant="outline" className="text-xs">{item.source}</Badge>
+        {!isReadOnly && onEdit && (
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+            <Pencil className="h-3 w-3" />
+          </Button>
+        )}
+        {!isReadOnly && onDelete && (
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={onDelete}>
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SplitTopupGroup({
+  group,
+  isReadOnly,
+  expanded,
+  onToggle,
+  onDelete,
+}: {
+  group: TopupGroup
+  isReadOnly: boolean
+  expanded: boolean
+  onToggle: () => void
+  onDelete?: () => void
+}) {
+  return (
+    <div className="rounded-md border bg-muted/30 p-2 space-y-1">
+      <div className="flex items-center justify-between text-sm">
+        <button type="button" className="flex items-center gap-1 text-left" onClick={onToggle}>
+          {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          <span className="font-mono font-medium">{fmtCurrency(group.totalAmount)} {CURRENCY_CODE}</span>
+          <Badge variant="secondary" className="text-[10px] ml-1">
+            {group.items.length}-way split
+          </Badge>
+        </button>
+        <div className="flex items-center gap-1">
+          {!isReadOnly && onDelete && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={onDelete}>
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </div>
+      {expanded && (
+        <div className="pl-5 space-y-1">
+          {group.items.map((t) => (
+            <div key={t.id} className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{fmtCurrency(t.amount)} MVR reload</span>
+              <div className="flex items-center gap-2">
+                {t.paidAmount && t.paidAmount !== t.amount && (
+                  <span>paid {fmtCurrency(t.paidAmount)}</span>
+                )}
+                <Badge variant="outline" className="text-[10px]">{t.source}</Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
