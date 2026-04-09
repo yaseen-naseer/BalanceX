@@ -38,6 +38,11 @@ export async function POST(request: NextRequest) {
       return ApiErrors.badRequest("Current password is incorrect")
     }
 
+    // Block same old/new password
+    if (currentPassword === newPassword) {
+      return ApiErrors.badRequest("New password must be different from current password")
+    }
+
     // Hash and update new password
     const newPasswordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS)
     await prisma.user.update({

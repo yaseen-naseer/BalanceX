@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09k'
+const WHATS_NEW_VERSION = '2026-04-09l'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -160,6 +160,13 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'Fixed the "Save Verification" button being clickable without agreeing to the verification checkbox. The button is now disabled until the checkbox is ticked, and uses an in-app confirmation dialog instead of a browser prompt for deletions.',
         tag: 'Fix',
+      },
+      {
+        icon: <Lock className="h-4 w-4 text-amber-500" />,
+        title: 'Enhanced Password Change',
+        description:
+          'Password change dialog now includes a strength meter, real-time requirements checklist, match/mismatch indicator, show/hide toggles, and blocks reusing the current password.',
+        tag: 'Improvement',
       },
     ],
   },
