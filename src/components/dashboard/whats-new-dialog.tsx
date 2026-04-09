@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09d'
+const WHATS_NEW_VERSION = '2026-04-09e'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -76,6 +76,20 @@ const CHANGELOG: ChangeGroup[] = [
         description:
           'CSRF origin validation, hardened rate limiting (3 attempts/min), IP spoofing fix, permission checks on all GET endpoints, atomic bank balance recalculation, CUID validation on bank lookups, wallet restricted to Owner/Accountant, month parameter validation, JWT re-verification reduced to 60s, HSTS header, stronger passwords (special character required), and critical audit logging for sensitive operations.',
         tag: 'Security',
+      },
+      {
+        icon: <Lock className="h-4 w-4 text-amber-500" />,
+        title: 'Password Requirements Shown',
+        description:
+          'User creation and password change forms now display the password requirements (min 8 chars, uppercase, lowercase, number, special character) inline.',
+        tag: 'Improvement',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Screenshot Fetch Fix',
+        description:
+          'Fixed a crash on the Day Detail page when no daily entry or screenshot exists for the selected date.',
+        tag: 'Fix',
       },
     ],
   },
