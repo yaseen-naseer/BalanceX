@@ -31,10 +31,11 @@ import {
   FileSearch,
   Users,
   Calculator,
+  SplitSquareHorizontal,
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09a'
+const WHATS_NEW_VERSION = '2026-04-09b'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -60,6 +61,13 @@ const CHANGELOG: ChangeGroup[] = [
         title: 'Retail Reload: Two Input Modes',
         description:
           'Retail reload sales now support two modes — enter "Cash Received" to see the reload amount, or enter "Reload Amount" to see the cash to collect. Toggle between them in the popover.',
+        tag: 'New',
+      },
+      {
+        icon: <SplitSquareHorizontal className="h-4 w-4 text-blue-500" />,
+        title: 'Split Payment Top-ups',
+        description:
+          'Wallet top-ups can now be split across up to 3 payment methods (Cash, Cheque, Transfer). All splits share a single reference number and create individual records for accurate tracking.',
         tag: 'New',
       },
     ],
