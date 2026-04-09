@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -11,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Pencil, UserX, CheckCircle2, XCircle } from 'lucide-react'
+import { Pencil, UserX, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react'
 import { roleLabels, roleBadgeColors, type User } from './types'
 
 export interface UserTableProps {
@@ -31,6 +32,10 @@ export function UserTable({
   onDeactivate,
   onReactivate,
 }: UserTableProps) {
+  const [showInactive, setShowInactive] = useState(false)
+  const inactiveCount = users.filter((u) => !u.isActive).length
+  const filteredUsers = showInactive ? users : users.filter((u) => u.isActive)
+
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -42,6 +47,20 @@ export function UserTable({
   }
 
   return (
+    <div className="space-y-2">
+      {inactiveCount > 0 && (
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowInactive(!showInactive)}
+            className="text-xs text-muted-foreground"
+          >
+            {showInactive ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
+            {showInactive ? 'Hide' : 'Show'} inactive ({inactiveCount})
+          </Button>
+        </div>
+      )}
     <div className="rounded-lg border">
       <Table>
         <TableHeader>
@@ -54,7 +73,7 @@ export function UserTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {users.map((user) => (
+          {filteredUsers.map((user) => (
             <TableRow key={user.id}>
               <TableCell className="font-medium">{user.name}</TableCell>
               <TableCell>{user.username}</TableCell>
@@ -105,6 +124,7 @@ export function UserTable({
           ))}
         </TableBody>
       </Table>
+    </div>
     </div>
   )
 }

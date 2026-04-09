@@ -199,7 +199,7 @@ export default function SettingsPage() {
         <UserFormDialog
           mode="add"
           open={showAddDialog}
-          onOpenChange={setShowAddDialog}
+          onOpenChange={(open) => { setShowAddDialog(open); if (!open) setFormData(initialFormData) }}
           formData={formData}
           onFormChange={handleFormChange}
           onSubmit={handleAddUser}

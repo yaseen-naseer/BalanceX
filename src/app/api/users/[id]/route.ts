@@ -44,7 +44,7 @@ export async function GET(
       return ApiErrors.notFound("User")
     }
 
-    return NextResponse.json(user)
+    return NextResponse.json({ success: true, data: user })
   } catch (error) {
     logError("Error fetching user", error)
     return ApiErrors.serverError("Failed to fetch user")
@@ -76,7 +76,7 @@ export async function PUT(
     }
 
     // Non-owners can only update name and email for themselves
-    if (!isUpdatingSelf || session.user.role !== "OWNER") {
+    if (session.user.role !== "OWNER") {
       if (role !== undefined || isActive !== undefined) {
         return ApiErrors.forbidden("Only Owner can change role or status")
       }
@@ -132,7 +132,7 @@ export async function PUT(
       }, { critical: true })
     }
 
-    return NextResponse.json(user)
+    return NextResponse.json({ success: true, data: user })
   } catch (error) {
     logError("Error updating user", error)
     return ApiErrors.serverError("Failed to update user")
