@@ -103,6 +103,9 @@ export function UserFormDialog({
               onChange={(e) => onFormChange({ password: e.target.value })}
               placeholder={isAdd ? 'Enter password' : 'Leave blank to keep current password'}
             />
+            <p className="text-xs text-muted-foreground">
+              Min 8 chars, uppercase, lowercase, number, and special character (!@#$%^&*)
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="role">Role *</Label>

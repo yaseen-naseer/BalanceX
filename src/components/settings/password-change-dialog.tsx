@@ -42,8 +42,8 @@ export function PasswordChangeDialog({ trigger }: PasswordChangeDialogProps) {
       return
     }
 
-    if (passwordData.newPassword.length < 6) {
-      toast.error('New password must be at least 6 characters')
+    if (passwordData.newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters')
       return
     }
 
@@ -107,6 +107,9 @@ export function PasswordChangeDialog({ trigger }: PasswordChangeDialogProps) {
               onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
               placeholder="Enter new password"
             />
+            <p className="text-xs text-muted-foreground">
+              Min 8 chars, uppercase, lowercase, number, and special character (!@#$%^&*)
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm-password">Confirm New Password</Label>
