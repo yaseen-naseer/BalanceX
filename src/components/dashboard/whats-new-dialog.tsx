@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-09l'
+const WHATS_NEW_VERSION = '2026-04-10b'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -52,6 +52,33 @@ interface ChangeGroup {
 }
 
 const CHANGELOG: ChangeGroup[] = [
+  {
+    version: 'v0.8-beta',
+    date: 'April 10, 2026',
+    items: [
+      {
+        icon: <CreditCard className="h-4 w-4 text-emerald-500" />,
+        title: 'Credit Settlements: Cheque & Bank Auto-Deposit',
+        description:
+          'Credit customer settlements now support Cheque as a payment method. Transfer and Cheque settlements automatically create a bank deposit in the bank ledger — no more manual reconciliation. Cash settlements continue to flow into the daily cash drawer.',
+        tag: 'New',
+      },
+      {
+        icon: <SplitSquareHorizontal className="h-4 w-4 text-blue-500" />,
+        title: 'Split Settlement Payments',
+        description:
+          'Customers can now settle their balance using up to 3 payment methods at once (Cash, Cheque, Transfer). Each method can be used once per settlement, and bank deposits are auto-created for the non-cash portions.',
+        tag: 'New',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Cash Settlements Now Reflect Before Draft',
+        description:
+          'Cash credit settlements now show in the daily entry expected closing even before the day\'s draft has been started. Previously the calculation only ran after a draft existed, hiding pre-recorded settlements from the cash reconciliation.',
+        tag: 'Fix',
+      },
+    ],
+  },
   {
     version: 'v0.7-beta',
     date: 'April 9, 2026',

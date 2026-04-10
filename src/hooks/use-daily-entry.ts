@@ -69,8 +69,13 @@ export function useDailyEntry(options: UseDailyEntryOptions = {}): UseDailyEntry
       const result = await response.json()
 
       if (result.success && result.data) {
-        const { calculationData: calcData, previousCashClosing: prevCash, ...entryData } = result.data
-        setEntry(entryData)
+        const { calculationData: calcData, previousCashClosing: prevCash, entry: explicitEntry, ...entryData } = result.data
+        // When entry is null (no daily entry yet), still capture calculation data + previous closing
+        if (explicitEntry === null) {
+          setEntry(null)
+        } else {
+          setEntry(entryData as DailyEntryWithRelations)
+        }
         setCalculationData(calcData || defaultCalculationData)
         setPreviousCashClosing(prevCash ?? null)
       } else if (response.status === 404) {

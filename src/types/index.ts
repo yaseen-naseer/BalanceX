@@ -178,10 +178,11 @@ export interface CreateCreditSaleDto {
 export interface CreateSettlementDto {
   customerId: string
   amount: number
-  paymentMethod: "CASH" | "TRANSFER"
+  paymentMethod: "CASH" | "TRANSFER" | "CHEQUE"
   reference?: string
   notes?: string
   date: string // ISO date string
+  settlementGroupId?: string
 }
 
 // Bank Transaction types

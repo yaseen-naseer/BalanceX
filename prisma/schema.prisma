@@ -241,20 +241,22 @@ enum CreditTransactionType {
 enum PaymentMethod {
   CASH
   TRANSFER
+  CHEQUE
   CREDIT
 }
 
 model CreditTransaction {
-  id            String                @id @default(cuid())
-  customerId    String
-  type          CreditTransactionType
-  amount        Decimal               @db.Decimal(12, 2)
-  paymentMethod PaymentMethod? // Only for settlements
-  reference     String?
-  notes         String?               @db.Text
-  date          DateTime              @db.Date
-  createdBy     String
-  createdAt     DateTime              @default(now())
+  id                String                @id @default(cuid())
+  customerId        String
+  type              CreditTransactionType
+  amount            Decimal               @db.Decimal(12, 2)
+  paymentMethod     PaymentMethod? // Only for settlements
+  reference         String?
+  notes             String?               @db.Text
+  date              DateTime              @db.Date
+  settlementGroupId String? // Shared ID for split settlements (null = single payment)
+  createdBy         String
+  createdAt         DateTime              @default(now())
 
   // Running balance at time of transaction
   balanceAfter Decimal @db.Decimal(12, 2)
@@ -266,6 +268,7 @@ model CreditTransaction {
 
   @@index([customerId])
   @@index([date])
+  @@index([settlementGroupId])
   @@map("credit_transactions")
 }
 

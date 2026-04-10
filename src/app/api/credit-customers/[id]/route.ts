@@ -230,6 +230,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             reference: body.reference || null,
             notes: body.notes || null,
             date: new Date(body.date),
+            settlementGroupId: body.settlementGroupId || null,
             createdBy: auth.user!.id,
             balanceAfter: bal,
           },
@@ -256,6 +257,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       throw err
     }
 
+    // Auto-create bank deposit for TRANSFER and CHEQUE settlements
+    if (body.paymentMethod === "TRANSFER" || body.paymentMethod === "CHEQUE") {
+      const settings = await prisma.bankSettings.findFirst({
+        orderBy: { openingDate: "desc" },
+      })
+      const allTransactions = await prisma.bankTransaction.findMany({
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      })
+      let currentBalance = settings ? Number(settings.openingBalance) : 0
+      for (const t of allTransactions) {
+        currentBalance += t.type === "DEPOSIT" ? Number(t.amount) : -Number(t.amount)
+      }
+
+      const refNote = body.reference ? ` (Ref: ${body.reference})` : ""
+      await prisma.bankTransaction.create({
+        data: {
+          type: "DEPOSIT",
+          amount: body.amount,
+          reference: `Credit Settlement - ${customer.name}`,
+          notes: `Auto-created from ${body.paymentMethod.toLowerCase()} settlement${refNote}`,
+          date: new Date(body.date),
+          createdBy: auth.user!.id,
+          balanceAfter: currentBalance + body.amount,
+        },
+      })
+    }
+
     await createAuditLog({
       action: "SETTLEMENT_RECORDED",
       userId: auth.user!.id,
@@ -266,6 +294,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         amount: body.amount,
         paymentMethod: body.paymentMethod,
         reference: body.reference || null,
+        settlementGroupId: body.settlementGroupId || null,
         balanceAfter,
       },
       ipAddress: getClientIpFromRequest(request),

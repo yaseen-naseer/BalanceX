@@ -33,6 +33,7 @@ export const nonNegativeNumberSchema = z.number().min(0, "Cannot be negative")
 export const customerTypeSchema = z.enum(["CONSUMER", "CORPORATE"])
 export const categoryTypeSchema = z.enum(["DHIRAAGU_BILLS", "RETAIL_RELOAD", "WHOLESALE_RELOAD", "SIM", "USIM"])
 export const paymentMethodSchema = z.enum(["CASH", "TRANSFER"])
+export const settlementPaymentMethodSchema = z.enum(["CASH", "TRANSFER", "CHEQUE"])
 export const bankTransactionTypeSchema = z.enum(["DEPOSIT", "WITHDRAWAL"])
 export const walletSourceSchema = z.enum(["CASH", "BANK"])
 export const walletOpeningSourceSchema = z.enum(["PREVIOUS_DAY", "INITIAL_SETUP", "MANUAL"])
@@ -130,10 +131,11 @@ export const createCreditSaleSchema = z.object({
 
 export const createSettlementSchema = z.object({
   amount: positiveNumberSchema,
-  paymentMethod: paymentMethodSchema,
+  paymentMethod: settlementPaymentMethodSchema,
   reference: z.string().max(100).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
   date: dateStringSchema,
+  settlementGroupId: z.string().max(50).optional().nullable(),
 })
 
 // ============================================

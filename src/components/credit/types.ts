@@ -10,7 +10,7 @@ export interface NewCustomerFormData {
 
 export interface SettlementFormData {
   amount: string
-  paymentMethod: 'CASH' | 'TRANSFER'
+  paymentMethod: 'CASH' | 'TRANSFER' | 'CHEQUE'
   reference: string
   notes: string
 }
@@ -24,6 +24,7 @@ export interface CreditTransaction {
   paymentMethod: string | null
   reference: string | null
   notes: string | null
+  settlementGroupId: string | null
   user?: { id: string; name: string }
 }
 

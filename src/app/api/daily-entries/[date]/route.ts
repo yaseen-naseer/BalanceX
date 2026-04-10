@@ -41,11 +41,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       include: fullEntryInclude,
     })
 
-    if (!entry) {
-      return ApiErrors.notFound('Entry')
-    }
-
     // Get calculation data and previous day's cash closing in parallel
+    // (always fetched — even if no entry exists yet, settlements/topups can already exist for the date)
     const previousDate = new Date(entryDate)
     previousDate.setDate(previousDate.getDate() - 1)
 
@@ -61,6 +58,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const previousCashClosing = previousEntry?.status === 'SUBMITTED' && previousEntry?.cashDrawer
       ? Number(previousEntry.cashDrawer.closingActual)
       : null
+
+    if (!entry) {
+      // Return calculation data so cash settlements/wallet topups are visible even before draft creation
+      return successResponse({
+        entry: null,
+        calculationData: { cashSettlements, walletTopupsFromCash },
+        previousCashClosing,
+      })
+    }
 
     // Serialize Decimal values to numbers before sending response
     const serializedEntry = convertPrismaDecimals(entry)

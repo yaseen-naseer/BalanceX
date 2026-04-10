@@ -249,7 +249,7 @@ export default function SettingsPage() {
             <Separator />
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Version</span>
-              <Badge variant="secondary">v0.7-beta</Badge>
+              <Badge variant="secondary">v0.8-beta</Badge>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
