@@ -69,7 +69,7 @@ export function SetupWizard() {
     else if (form.username.length < 3) errs.username = "At least 3 characters"
     else if (!/^[a-zA-Z0-9_]+$/.test(form.username)) errs.username = "Letters, numbers and underscores only"
     if (!form.password) errs.password = "Password is required"
-    else if (form.password.length < 8) errs.password = "At least 8 characters"
+    else if (form.password.length < 12) errs.password = "At least 12 characters"
     else if (!/[a-z]/.test(form.password)) errs.password = "Must contain a lowercase letter"
     else if (!/[A-Z]/.test(form.password)) errs.password = "Must contain an uppercase letter"
     else if (!/[0-9]/.test(form.password)) errs.password = "Must contain a number"
@@ -201,7 +201,7 @@ export function SetupWizard() {
                 <Input placeholder="e.g. owner" value={form.username} onChange={set("username")} autoComplete="username" />
               </Field>
               <Field label="Password" error={errors.password}>
-                <Input type="password" placeholder="Min. 8 characters" value={form.password} onChange={set("password")} autoComplete="new-password" />
+                <Input type="password" placeholder="Min. 12 characters" value={form.password} onChange={set("password")} autoComplete="new-password" />
               </Field>
               <Field label="Confirm Password" error={errors.confirmPassword}>
                 <Input type="password" placeholder="Re-enter password" value={form.confirmPassword} onChange={set("confirmPassword")} autoComplete="new-password" onKeyDown={handleKeyDown(handleNext)} />

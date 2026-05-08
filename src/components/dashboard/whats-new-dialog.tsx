@@ -36,7 +36,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-05-06'
+const WHATS_NEW_VERSION = '2026-05-08'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -53,6 +53,19 @@ interface ChangeGroup {
 }
 
 const CHANGELOG: ChangeGroup[] = [
+  {
+    version: 'v0.9.1-beta',
+    date: 'May 8, 2026',
+    items: [
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Setup Wizard Password Rule Surfaces Earlier',
+        description:
+          'The Owner Account step now enforces the same 12-character minimum as the server. Previously the requirement was only checked at final submit, so users would fill out all three steps before seeing the error. The placeholder text and inline validation now show the correct rule.',
+        tag: 'Fix',
+      },
+    ],
+  },
   {
     version: 'v0.9-beta',
     date: 'May 6, 2026',
