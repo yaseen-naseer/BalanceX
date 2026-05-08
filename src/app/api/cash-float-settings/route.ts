@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { requireRole } from "@/lib/api-auth"
 import { UserRole } from "@prisma/client"
@@ -10,6 +10,7 @@ import {
 import { z } from "zod"
 import { logError } from "@/lib/logger"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { ApiErrors, successResponse, successOk } from "@/lib/api-response"
 
 // Schema for PATCH (includes id)
 const patchCashFloatSettingsSchema = z.object({
@@ -27,19 +28,10 @@ export async function GET() {
       orderBy: { amount: "asc" },
     })
 
-    return NextResponse.json({
-      success: true,
-      data: settings.map((s) => ({
-        ...s,
-        amount: Number(s.amount),
-      })),
-    })
+    return successResponse(settings.map((s) => ({ ...s, amount: Number(s.amount) })))
   } catch (error) {
     logError("Error fetching cash float settings", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch float settings" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch float settings")
   }
 }
 
@@ -72,22 +64,10 @@ export async function POST(request: NextRequest) {
 
     await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: setting.id, details: { setting: "cash_float_setting_created", name, amount }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          ...setting,
-          amount: Number(setting.amount),
-        },
-      },
-      { status: 201 }
-    )
+    return successResponse({ ...setting, amount: Number(setting.amount) }, 201)
   } catch (error) {
     logError("Error creating cash float setting", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to create float setting" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to create float setting")
   }
 }
 
@@ -122,19 +102,10 @@ export async function PATCH(request: NextRequest) {
 
     await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: id, details: { setting: "cash_float_setting_updated", name, amount, isDefault, isActive }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...setting,
-        amount: Number(setting.amount),
-      },
-    })
+    return successResponse({ ...setting, amount: Number(setting.amount) })
   } catch (error) {
     logError("Error updating cash float setting", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to update float setting" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to update float setting")
   }
 }
 
@@ -148,10 +119,7 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id")
 
     if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Setting ID is required" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Setting ID is required")
     }
 
     await prisma.cashFloatSettings.update({
@@ -159,14 +127,11 @@ export async function DELETE(request: NextRequest) {
       data: { isActive: false, isDefault: false },
     })
 
-    await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: id!, details: { setting: "cash_float_setting_deactivated" }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
+    await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: id, details: { setting: "cash_float_setting_deactivated" }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
 
-    return NextResponse.json({ success: true })
+    return successOk()
   } catch (error) {
     logError("Error deactivating cash float setting", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to deactivate float setting" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to deactivate float setting")
   }
 }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useDialogState } from '@/hooks/use-dialog-state'
 import {
   Select,
   SelectContent,
@@ -37,7 +38,7 @@ export interface ReopenDialogProps {
 }
 
 export function ReopenDialog({ onReopen, isLoading }: ReopenDialogProps) {
-  const [open, setOpen] = useState(false)
+  const dialog = useDialogState()
   const [selectedReason, setSelectedReason] = useState('')
   const [customReason, setCustomReason] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -49,7 +50,7 @@ export function ReopenDialog({ onReopen, isLoading }: ReopenDialogProps) {
     setSelectedReason('')
     setCustomReason('')
     setError('')
-    setOpen(true)
+    dialog.open()
   }
 
   const handleReopen = async () => {
@@ -62,7 +63,7 @@ export function ReopenDialog({ onReopen, isLoading }: ReopenDialogProps) {
     const success = await onReopen(finalReason)
     setIsSubmitting(false)
     if (success) {
-      setOpen(false)
+      dialog.close()
     } else {
       setError('Failed to reopen entry. Please try again.')
     }
@@ -79,7 +80,7 @@ export function ReopenDialog({ onReopen, isLoading }: ReopenDialogProps) {
         Reopen Entry
       </Button>
 
-      <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialog open={dialog.isOpen} onOpenChange={dialog.onOpenChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <div className="flex items-center gap-2">

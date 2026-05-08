@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { getAuthenticatedUser } from "@/lib/api-auth"
 import { startOfMonth, endOfMonth, format, differenceInDays } from "date-fns"
 import { logError } from "@/lib/logger"
+import { ApiErrors, successResponse } from "@/lib/api-response"
+import { monthParamSchema } from "@/lib/validations/schemas"
 
 // GET /api/reports?month=2026-01 - Get monthly report data
 export async function GET(request: NextRequest) {
@@ -11,7 +13,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const monthParam = searchParams.get("month") // Format: 2026-01
+    const monthParamRaw = searchParams.get("month") // Format: 2026-01
+
+    let monthParam: string | null = null
+    if (monthParamRaw !== null) {
+      const validation = monthParamSchema.safeParse(monthParamRaw)
+      if (!validation.success) {
+        return ApiErrors.badRequest("Invalid month format. Expected YYYY-MM")
+      }
+      monthParam = validation.data
+    }
 
     // Parse month parameter or use current month
     const targetDate = monthParam ? new Date(`${monthParam}-01`) : new Date()
@@ -254,34 +265,28 @@ export async function GET(request: NextRequest) {
     const daysInMonth = differenceInDays(monthEnd, monthStart) + 1
     const workingDays = dailyEntries.length
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        month: format(targetDate, "yyyy-MM"),
-        monthLabel: format(targetDate, "MMMM yyyy"),
-        summary: {
-          totalRevenue,
-          dailyAverage: workingDays > 0 ? totalRevenue / workingDays : 0,
-          submittedDays,
-          draftDays,
-          missingDays: daysInMonth - workingDays,
-          totalCashVariance,
-          totalWalletVariance,
-        },
-        dailyBreakdown,
-        paymentMethodBreakdown,
-        customerTypeBreakdown,
-        categoryBreakdown,
-        varianceTrend,
-        creditAging,
+    return successResponse({
+      month: format(targetDate, "yyyy-MM"),
+      monthLabel: format(targetDate, "MMMM yyyy"),
+      summary: {
+        totalRevenue,
+        dailyAverage: workingDays > 0 ? totalRevenue / workingDays : 0,
+        submittedDays,
+        draftDays,
+        missingDays: daysInMonth - workingDays,
+        totalCashVariance,
+        totalWalletVariance,
       },
+      dailyBreakdown,
+      paymentMethodBreakdown,
+      customerTypeBreakdown,
+      categoryBreakdown,
+      varianceTrend,
+      creditAging,
     })
   } catch (error) {
     logError("Error fetching report data", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch report data" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch report data")
   }
 }
 

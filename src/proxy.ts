@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
+import { getToken } from "next-auth/jwt"
+
+// NextAuth session-token cookie names (dev vs prod). Defined once so the
+// invalidation cleanup below clears both consistently.
+const SESSION_COOKIE_NAMES = [
+  "next-auth.session-token",
+  "__Secure-next-auth.session-token",
+] as const
 
 interface RateLimitEntry {
   count: number
@@ -13,6 +21,9 @@ const AUTH_LIMIT = 3
 const AUTH_WINDOW = 60 * 1000
 const API_LIMIT = 100
 const API_WINDOW = 60 * 1000
+// Setup is a one-time bootstrap; abuse is unlikely but cheap to harden (S6).
+const SETUP_LIMIT = 5
+const SETUP_WINDOW = 15 * 60 * 1000
 
 // Issue #3: Prefer Cloudflare's trusted header over spoofable x-forwarded-for
 function getClientIp(request: NextRequest): string {
@@ -63,7 +74,7 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
   return response
 }
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const ip = getClientIp(request)
 
@@ -119,6 +130,30 @@ export function proxy(request: NextRequest) {
     return addSecurityHeaders(response)
   }
 
+  // Stricter limit for /api/setup POST (bootstrap endpoint; should rarely be called).
+  // Falls through to the generic API limit afterwards.
+  if (pathname === "/api/setup" && request.method === "POST") {
+    const key = `setup:${ip}`
+    const result = checkRateLimit(key, SETUP_LIMIT, SETUP_WINDOW)
+    if (!result.success) {
+      const retryAfter = Math.ceil((result.resetAt - Date.now()) / 1000)
+      return addSecurityHeaders(
+        NextResponse.json(
+          { success: false, error: "Too many setup attempts. Please try again later." },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(retryAfter),
+              "X-RateLimit-Limit": String(SETUP_LIMIT),
+              "X-RateLimit-Remaining": "0",
+              "X-RateLimit-Reset": String(result.resetAt),
+            },
+          }
+        )
+      )
+    }
+  }
+
   // Rate limit other API routes
   if (pathname.startsWith("/api")) {
     const key = `api:${ip}`
@@ -149,16 +184,24 @@ export function proxy(request: NextRequest) {
     return addSecurityHeaders(response)
   }
 
-  // Check auth for protected routes
+  // Check auth for protected routes. Two layers:
+  //   (1) No cookie → redirect to /login (existing behaviour).
+  //   (2) Cookie present but JWT decodes as `invalidated` (set by the jwt callback
+  //       when the user was deactivated/deleted server-side) → redirect AND
+  //       actively clear the cookie. Closes S16 — without this, the cookie
+  //       persists in the browser until manual signOut or 8-hour maxAge expiry.
   if (!isPublicPath) {
-    const sessionToken =
-      request.cookies.get("next-auth.session-token") ||
-      request.cookies.get("__Secure-next-auth.session-token")
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
 
-    if (!sessionToken) {
+    if (!token || token.invalidated) {
       const loginUrl = new URL("/login", request.url)
       loginUrl.searchParams.set("callbackUrl", pathname)
-      return addSecurityHeaders(NextResponse.redirect(loginUrl))
+      const response = NextResponse.redirect(loginUrl)
+      // Clear both cookie names so dev and prod cookies are both wiped.
+      for (const name of SESSION_COOKIE_NAMES) {
+        response.cookies.delete(name)
+      }
+      return addSecurityHeaders(response)
     }
   }
 

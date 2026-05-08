@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
@@ -12,6 +12,7 @@ import { withTransaction } from "@/lib/utils/atomic"
 import { calculateCustomerOutstanding } from "@/lib/calculations/credit"
 import { CURRENCY_CODE } from "@/lib/constants"
 import { logError } from "@/lib/logger"
+import { ApiErrors, successResponse } from "@/lib/api-response"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -30,10 +31,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     })
 
     if (!customer) {
-      return NextResponse.json(
-        { success: false, error: "Customer not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Customer")
     }
 
     // Get all transactions
@@ -56,26 +54,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const lastActivity = transactions[0]?.date || null
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...customer,
-        creditLimit: customer.creditLimit ? Number(customer.creditLimit) : null,
-        outstandingBalance,
-        lastActivityDate: lastActivity,
-        transactions: transactions.map((tx) => ({
-          ...tx,
-          amount: Number(tx.amount),
-          balanceAfter: Number(tx.balanceAfter),
-        })),
-      },
+    return successResponse({
+      ...customer,
+      creditLimit: customer.creditLimit ? Number(customer.creditLimit) : null,
+      outstandingBalance,
+      lastActivityDate: lastActivity,
+      transactions: transactions.map((tx) => ({
+        ...tx,
+        amount: Number(tx.amount),
+        balanceAfter: Number(tx.balanceAfter),
+      })),
     })
   } catch (error) {
     logError("Error fetching credit customer", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch credit customer" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch credit customer")
   }
 }
 
@@ -97,23 +89,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     })
 
     if (!customer) {
-      return NextResponse.json(
-        { success: false, error: "Customer not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Customer")
     }
 
     // B4: Check outstanding balance before deactivation (non-Owner blocked)
     if (body.isActive === false && customer.isActive) {
       const outstanding = await calculateCustomerOutstanding(id)
       if (outstanding > 0 && auth.user!.role !== "OWNER") {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Cannot deactivate: outstanding balance of ${outstanding.toLocaleString()} ${CURRENCY_CODE}. Owner approval required.`,
-            outstandingBalance: outstanding,
-          },
-          { status: 400 }
+        return ApiErrors.badRequest(
+          `Cannot deactivate: outstanding balance of ${outstanding.toLocaleString()} ${CURRENCY_CODE}. Owner approval required.`,
         )
       }
     }
@@ -141,21 +125,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       })
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...updatedCustomer,
-        creditLimit: updatedCustomer.creditLimit
-          ? Number(updatedCustomer.creditLimit)
-          : null,
-      },
+    return successResponse({
+      ...updatedCustomer,
+      creditLimit: updatedCustomer.creditLimit
+        ? Number(updatedCustomer.creditLimit)
+        : null,
     })
   } catch (error) {
     logError("Error updating credit customer", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to update credit customer" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to update credit customer")
   }
 }
 
@@ -171,10 +149,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   })
 
   if (!userExists) {
-    return NextResponse.json(
-      { success: false, error: "Session expired. Please logout and login again." },
-      { status: 401 }
-    )
+    return ApiErrors.sessionExpired()
   }
 
   const { id } = await params
@@ -190,10 +165,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     })
 
     if (!customer) {
-      return NextResponse.json(
-        { success: false, error: "Customer not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Customer")
     }
 
     // Atomic: calculate outstanding + validate + create settlement in single transaction (S4)
@@ -239,6 +211,39 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           },
         })
 
+        // For TRANSFER/CHEQUE settlements, atomically create the matching bank deposit
+        // and link via FK so future maintenance doesn't rely on content matching (S1, S3).
+        if (body.paymentMethod === "TRANSFER" || body.paymentMethod === "CHEQUE") {
+          const settings = await tx.bankSettings.findFirst({
+            orderBy: { openingDate: "desc" },
+          })
+          const allBankTxs = await tx.bankTransaction.findMany({
+            orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+          })
+          let currentBankBalance = settings ? Number(settings.openingBalance) : 0
+          for (const t of allBankTxs) {
+            currentBankBalance += t.type === "DEPOSIT" ? Number(t.amount) : -Number(t.amount)
+          }
+
+          const refNote = body.reference ? ` (Ref: ${body.reference})` : ""
+          const bankTx = await tx.bankTransaction.create({
+            data: {
+              type: "DEPOSIT",
+              amount: body.amount,
+              reference: `Credit Settlement - ${customer.name}`,
+              notes: `Auto-created from ${body.paymentMethod.toLowerCase()} settlement${refNote}`,
+              date: new Date(body.date),
+              createdBy: auth.user!.id,
+              balanceAfter: currentBankBalance + body.amount,
+            },
+          })
+
+          await tx.creditTransaction.update({
+            where: { id: tx_result.id },
+            data: { bankTransactionId: bankTx.id },
+          })
+        }
+
         return { transaction: tx_result, balanceAfter: bal }
       })
 
@@ -246,42 +251,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       balanceAfter = result.balanceAfter
     } catch (err: unknown) {
       if (err && typeof err === "object" && "type" in err && (err as { type: string }).type === "EXCEEDS_BALANCE") {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Settlement amount cannot exceed outstanding balance",
-          },
-          { status: 400 }
-        )
+        return ApiErrors.badRequest("Settlement amount cannot exceed outstanding balance")
       }
       throw err
-    }
-
-    // Auto-create bank deposit for TRANSFER and CHEQUE settlements
-    if (body.paymentMethod === "TRANSFER" || body.paymentMethod === "CHEQUE") {
-      const settings = await prisma.bankSettings.findFirst({
-        orderBy: { openingDate: "desc" },
-      })
-      const allTransactions = await prisma.bankTransaction.findMany({
-        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-      })
-      let currentBalance = settings ? Number(settings.openingBalance) : 0
-      for (const t of allTransactions) {
-        currentBalance += t.type === "DEPOSIT" ? Number(t.amount) : -Number(t.amount)
-      }
-
-      const refNote = body.reference ? ` (Ref: ${body.reference})` : ""
-      await prisma.bankTransaction.create({
-        data: {
-          type: "DEPOSIT",
-          amount: body.amount,
-          reference: `Credit Settlement - ${customer.name}`,
-          notes: `Auto-created from ${body.paymentMethod.toLowerCase()} settlement${refNote}`,
-          date: new Date(body.date),
-          createdBy: auth.user!.id,
-          balanceAfter: currentBalance + body.amount,
-        },
-      })
     }
 
     await createAuditLog({
@@ -301,23 +273,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json(
+    return successResponse(
       {
-        success: true,
-        data: {
-          ...transaction,
-          amount: Number(transaction.amount),
-          balanceAfter: Number(transaction.balanceAfter),
-        },
+        ...transaction,
+        amount: Number(transaction.amount),
+        balanceAfter: Number(transaction.balanceAfter),
       },
-      { status: 201 }
+      201
     )
   } catch (error) {
     logError("Error recording settlement", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to record settlement" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to record settlement")
   }
 }
 

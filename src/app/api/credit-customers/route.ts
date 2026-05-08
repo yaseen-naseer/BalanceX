@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
@@ -7,6 +7,7 @@ import { createCreditCustomerSchema, validateRequestBody } from "@/lib/validatio
 import { calculateCreditBalance } from "@/lib/utils/balance"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 import { logError } from "@/lib/logger"
+import { ApiErrors, successResponse, paginatedResponse } from "@/lib/api-response"
 
 // GET /api/credit-customers - List all credit customers
 export async function GET(request: NextRequest) {
@@ -88,17 +89,10 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({
-      success: true,
-      data: customersWithBalance,
-      pagination: { total, limit, offset },
-    })
+    return paginatedResponse(customersWithBalance, { total, limit, offset })
   } catch (error) {
     logError("Error fetching credit customers", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch credit customers" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch credit customers")
   }
 }
 
@@ -137,23 +131,17 @@ export async function POST(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json(
+    return successResponse(
       {
-        success: true,
-        data: {
-          ...customer,
-          creditLimit: customer.creditLimit ? Number(customer.creditLimit) : null,
-          outstandingBalance: 0,
-          lastActivityDate: null,
-        },
+        ...customer,
+        creditLimit: customer.creditLimit ? Number(customer.creditLimit) : null,
+        outstandingBalance: 0,
+        lastActivityDate: null,
       },
-      { status: 201 }
+      201
     )
   } catch (error) {
     logError("Error creating credit customer", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to create credit customer" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to create credit customer")
   }
 }

@@ -39,6 +39,12 @@ declare module "next-auth/jwt" {
     id: string
     username: string
     role: UserRole
+    /** Set by the `jwt` callback when the user is deactivated/deleted server-side.
+     * The middleware reads this to actively clear the cookie on the next protected
+     * page navigation (closes S16 — the "soft" invalidation gap). */
+    invalidated?: boolean
+    /** Last DB-verification timestamp (Unix seconds), throttles the every-request check. */
+    lastVerified?: number
   }
 }
 

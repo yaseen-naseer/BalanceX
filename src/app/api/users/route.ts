@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/db"
@@ -7,7 +7,7 @@ import { createUserSchema, validateRequestBody } from "@/lib/validations"
 import { logError } from "@/lib/logger"
 import { BCRYPT_ROUNDS } from "@/lib/constants"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
-import { ApiErrors } from "@/lib/api-response"
+import { ApiErrors, successResponse } from "@/lib/api-response"
 
 // GET - List all users (Owner only)
 export async function GET() {
@@ -34,7 +34,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     })
 
-    return NextResponse.json({ success: true, data: users })
+    return successResponse(users)
   } catch (error) {
     logError("Error fetching users", error)
     return ApiErrors.serverError("Failed to fetch users")
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json(user, { status: 201 })
+    return successResponse(user, 201)
   } catch (error) {
     logError("Error creating user", error)
     return ApiErrors.serverError("Failed to create user")

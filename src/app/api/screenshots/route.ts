@@ -1,14 +1,15 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/db"
-import { ApiErrors, errorResponse } from "@/lib/api-response"
+import { ApiErrors, errorResponse, successResponse, successOk } from "@/lib/api-response"
 import { writeFile, mkdir, unlink } from "fs/promises"
 import { join, resolve } from "path"
 import { existsSync } from "fs"
 import { randomBytes } from "crypto"
 import { logError } from "@/lib/logger"
 import { createAuditLog } from "@/lib/audit"
+import { SCREENSHOTS_DIR } from "@/lib/storage"
 
 // POST - Upload a screenshot for a specific date
 export async function POST(request: NextRequest) {
@@ -90,18 +91,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Create uploads directory if it doesn't exist
-    const uploadsDir = join(process.cwd(), "public", "uploads", "screenshots")
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true })
+    if (!existsSync(SCREENSHOTS_DIR)) {
+      await mkdir(SCREENSHOTS_DIR, { recursive: true })
     }
 
     // S13: Generate unpredictable filename using crypto random bytes
     const filename = `${date}-${randomBytes(16).toString("hex")}.${ext}`
-    const filepath = join(uploadsDir, filename)
+    const filepath = join(SCREENSHOTS_DIR, filename)
 
     // S13: Validate resolved path stays within uploads directory
     const resolvedPath = resolve(filepath)
-    const resolvedUploadsDir = resolve(uploadsDir)
+    const resolvedUploadsDir = resolve(SCREENSHOTS_DIR)
     if (!resolvedPath.startsWith(resolvedUploadsDir)) {
       return ApiErrors.badRequest("Invalid file path")
     }
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       details: { date, filename, dailyEntryId: dailyEntry.id },
     })
 
-    return NextResponse.json(screenshot, { status: 201 })
+    return successResponse(screenshot, 201)
   } catch (error) {
     logError("Error uploading screenshot", error)
     return ApiErrors.serverError("Failed to upload screenshot")
@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!dailyEntry || !dailyEntry.screenshot) {
-      return NextResponse.json({ success: true, data: null })
+      return successResponse(null)
     }
 
     const screenshot = dailyEntry.screenshot
@@ -193,13 +193,10 @@ export async function GET(request: NextRequest) {
         where: { id: screenshot.verifiedBy },
         select: { name: true },
       })
-      return NextResponse.json({
-        success: true,
-        data: { ...screenshot, filepath, verifiedBy: verifier?.name || null },
-      })
+      return successResponse({ ...screenshot, filepath, verifiedBy: verifier?.name || null })
     }
 
-    return NextResponse.json({ success: true, data: { ...screenshot, filepath } })
+    return successResponse({ ...screenshot, filepath })
   } catch (error) {
     logError("Error fetching screenshot", error)
     return ApiErrors.serverError("Failed to fetch screenshot")
@@ -239,11 +236,11 @@ export async function DELETE(request: NextRequest) {
       return ApiErrors.badRequest("Cannot delete a verified screenshot")
     }
 
-    // Delete the file from disk — validate path stays within public directory
-    const filepath = join(process.cwd(), "public", screenshot.filepath)
+    // Delete the file from disk — validate path stays within screenshots directory
+    const filepath = join(SCREENSHOTS_DIR, screenshot.filename)
     const resolvedFilepath = resolve(filepath)
-    const publicDir = resolve(join(process.cwd(), "public"))
-    if (!resolvedFilepath.startsWith(publicDir)) {
+    const resolvedDir = resolve(SCREENSHOTS_DIR)
+    if (!resolvedFilepath.startsWith(resolvedDir)) {
       return ApiErrors.badRequest("Invalid file path")
     }
     if (existsSync(filepath)) {
@@ -267,7 +264,7 @@ export async function DELETE(request: NextRequest) {
       details: { filename: screenshot.filename, dailyEntryId: screenshot.dailyEntryId },
     })
 
-    return NextResponse.json({ success: true })
+    return successOk()
   } catch (error) {
     logError("Error deleting screenshot", error)
     return ApiErrors.serverError("Failed to delete screenshot")

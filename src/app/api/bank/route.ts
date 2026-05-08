@@ -1,17 +1,18 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import {
   createBankTransactionSchema,
   updateBankTransactionSchema,
-  bankSettingsSchema,
   validateRequestBody,
 } from "@/lib/validations"
 import { monthParamSchema } from "@/lib/validations/schemas"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 import { withTransaction } from "@/lib/utils/atomic"
+import { recalculateBankBalancesFrom, getCurrentBankBalance } from "@/lib/bank-utils"
 import { logError } from "@/lib/logger"
+import { ApiErrors, successResponse, successOk } from "@/lib/api-response"
 
 // GET /api/bank - Get bank transactions and balance
 export async function GET(request: NextRequest) {
@@ -21,16 +22,18 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const month = searchParams.get("month") // Format: YYYY-MM
   const type = searchParams.get("type") as "DEPOSIT" | "WITHDRAWAL" | null
-  const limit = parseInt(searchParams.get("limit") || "50")
-  const offset = parseInt(searchParams.get("offset") || "0")
+  // `limit=0` is a documented sentinel meaning "no pagination" — the bank ledger UI
+  // uses it to load every transaction for client-side month filtering. Cap at 5000
+  // to keep the DoS protection intent of audit 0.5 (well above any realistic
+  // small-shop volume of ~365 txs/year for ~10 years).
+  const rawLimit = parseInt(searchParams.get("limit") || "50")
+  const limit = rawLimit === 0 ? 5000 : Math.min(Math.max(rawLimit, 1), 5000)
+  const offset = Math.max(parseInt(searchParams.get("offset") || "0"), 0)
 
   if (month) {
     const monthValidation = monthParamSchema.safeParse(month)
     if (!monthValidation.success) {
-      return NextResponse.json(
-        { success: false, error: "Invalid month format. Expected YYYY-MM" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Invalid month format. Expected YYYY-MM")
     }
   }
 
@@ -56,33 +59,18 @@ export async function GET(request: NextRequest) {
       where.date = { gte: startDate, lte: endDate }
     }
 
-    // Get transactions (limit=0 means no limit)
     const transactions = await prisma.bankTransaction.findMany({
       where,
       include: {
         user: { select: { id: true, name: true } },
       },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      ...(limit > 0 && { take: limit, skip: offset }),
-    })
-
-    const total = await prisma.bankTransaction.count({ where })
-
-    // Calculate current balance
-    const allTransactions = await prisma.bankTransaction.findMany({
-      orderBy: { date: "asc" },
+      take: limit,
+      skip: offset,
     })
 
     const openingBalance = settings ? Number(settings.openingBalance) : 0
-    let currentBalance = openingBalance
-
-    for (const tx of allTransactions) {
-      if (tx.type === "DEPOSIT") {
-        currentBalance += Number(tx.amount)
-      } else {
-        currentBalance -= Number(tx.amount)
-      }
-    }
+    const currentBalance = await getCurrentBankBalance()
 
     // Calculate monthly totals
     const monthlyDeposits = transactions
@@ -93,28 +81,21 @@ export async function GET(request: NextRequest) {
       .filter((tx) => tx.type === "WITHDRAWAL")
       .reduce((sum, tx) => sum + Number(tx.amount), 0)
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        currentBalance,
-        openingBalance,
-        openingDate: settings?.openingDate || null,
-        monthlyDeposits,
-        monthlyWithdrawals,
-        transactions: transactions.map((tx) => ({
-          ...tx,
-          amount: Number(tx.amount),
-          balanceAfter: Number(tx.balanceAfter),
-        })),
-      },
-      pagination: { total, limit, offset },
+    return successResponse({
+      currentBalance,
+      openingBalance,
+      openingDate: settings?.openingDate || null,
+      monthlyDeposits,
+      monthlyWithdrawals,
+      transactions: transactions.map((tx) => ({
+        ...tx,
+        amount: Number(tx.amount),
+        balanceAfter: Number(tx.balanceAfter),
+      })),
     })
   } catch (error) {
     logError("Error fetching bank data", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch bank data" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch bank data")
   }
 }
 
@@ -140,27 +121,12 @@ export async function POST(request: NextRequest) {
     })
 
     if (!userExists) {
-      return NextResponse.json(
-        { success: false, error: "Session expired. Please logout and login again." },
-        { status: 401 }
-      )
+      return ApiErrors.sessionExpired()
     }
 
     // Atomic: calculate balance + create in a single serializable transaction
     const transaction = await withTransaction(async (tx) => {
-      const settings = await tx.bankSettings.findFirst({
-        orderBy: { openingDate: "desc" },
-      })
-
-      const allTransactions = await tx.bankTransaction.findMany({
-        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-      })
-
-      let currentBalance = settings ? Number(settings.openingBalance) : 0
-      for (const t of allTransactions) {
-        currentBalance += t.type === "DEPOSIT" ? Number(t.amount) : -Number(t.amount)
-      }
-
+      const currentBalance = await getCurrentBankBalance(tx)
       const balanceAfter =
         body.type === "DEPOSIT"
           ? currentBalance + body.amount
@@ -196,78 +162,17 @@ export async function POST(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json(
+    return successResponse(
       {
-        success: true,
-        data: {
-          ...transaction,
-          amount: Number(transaction.amount),
-          balanceAfter: Number(transaction.balanceAfter),
-        },
+        ...transaction,
+        amount: Number(transaction.amount),
+        balanceAfter: Number(transaction.balanceAfter),
       },
-      { status: 201 }
+      201
     )
   } catch (error) {
     logError("Error creating bank transaction", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to create bank transaction" },
-      { status: 500 }
-    )
-  }
-}
-
-// PATCH /api/bank - Update bank settings (opening balance)
-export async function PATCH(request: NextRequest) {
-  const auth = await requirePermission(PERMISSIONS.BANK_SET_OPENING)
-  if (auth.error) return auth.error
-
-  try {
-    // Validate request body
-    const validation = await validateRequestBody(request, bankSettingsSchema)
-    if ("error" in validation) return validation.error
-    const body = validation.data
-
-    // Use provided date or default to today
-    const openingDate = body.openingDate ? new Date(body.openingDate) : new Date()
-
-    const settings = await prisma.bankSettings.upsert({
-      where: { id: "default" },
-      create: {
-        id: "default",
-        openingBalance: body.openingBalance,
-        openingDate: openingDate,
-      },
-      update: {
-        openingBalance: body.openingBalance,
-        openingDate: openingDate,
-      },
-    })
-
-    await createAuditLog({
-      action: "SETTINGS_CHANGED",
-      userId: auth.user!.id,
-      details: {
-        setting: "bank_opening_balance",
-        openingBalance: body.openingBalance,
-        openingDate: openingDate.toISOString().slice(0, 10),
-      },
-      ipAddress: getClientIpFromRequest(request),
-      userAgent: getUserAgentFromRequest(request),
-    })
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...settings,
-        openingBalance: Number(settings.openingBalance),
-      },
-    })
-  } catch (error) {
-    logError("Error updating bank settings", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to update bank settings" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to create bank transaction")
   }
 }
 
@@ -281,10 +186,7 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id")
 
     if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Transaction ID is required" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Transaction ID is required")
     }
 
     // Get the transaction to be deleted first
@@ -293,58 +195,23 @@ export async function DELETE(request: NextRequest) {
     })
 
     if (!transactionToDelete) {
-      return NextResponse.json(
-        { success: false, error: "Transaction not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Transaction")
     }
 
     // Block deletion of auto-created wallet top-up transactions
     if (transactionToDelete.reference === "Wallet Top-up" && transactionToDelete.notes?.startsWith("Auto-created from wallet top-up")) {
-      return NextResponse.json(
-        { success: false, error: "This transaction was auto-created from a wallet top-up. Delete the top-up from the Wallet page instead." },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("This transaction was auto-created from a wallet top-up. Delete the top-up from the Wallet page instead.")
     }
 
     // Block deletion of auto-created transfer sale deposits
     if (transactionToDelete.reference === "Transfer Sale" && transactionToDelete.notes?.startsWith("Auto-created from transfer sale")) {
-      return NextResponse.json(
-        { success: false, error: "This transaction was auto-created from a transfer sale. Delete the sale line item instead." },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("This transaction was auto-created from a transfer sale. Delete the sale line item instead.")
     }
 
-    // Atomic: delete + recalculate all balances in a single serializable transaction
+    // Atomic: delete + recalculate balances from the affected date onward.
     await withTransaction(async (tx) => {
-      await tx.bankTransaction.delete({
-        where: { id },
-      })
-
-      const settings = await tx.bankSettings.findFirst({
-        orderBy: { openingDate: "desc" },
-      })
-
-      const allTransactions = await tx.bankTransaction.findMany({
-        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-      })
-
-      let runningBalance = settings ? Number(settings.openingBalance) : 0
-
-      for (const t of allTransactions) {
-        if (t.type === "DEPOSIT") {
-          runningBalance += Number(t.amount)
-        } else {
-          runningBalance -= Number(t.amount)
-        }
-
-        if (Number(t.balanceAfter) !== runningBalance) {
-          await tx.bankTransaction.update({
-            where: { id: t.id },
-            data: { balanceAfter: runningBalance },
-          })
-        }
-      }
+      await tx.bankTransaction.delete({ where: { id } })
+      await recalculateBankBalancesFrom(transactionToDelete.date, tx)
     })
 
     await createAuditLog({
@@ -361,13 +228,10 @@ export async function DELETE(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json({ success: true })
+    return successOk()
   } catch (error) {
     logError("Error deleting bank transaction", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to delete bank transaction" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to delete bank transaction")
   }
 }
 
@@ -387,10 +251,7 @@ export async function PUT(request: NextRequest) {
     })
 
     if (!existingTransaction) {
-      return NextResponse.json(
-        { success: false, error: "Transaction not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Transaction")
     }
 
     const updatedTransaction = await prisma.bankTransaction.update({
@@ -404,19 +265,13 @@ export async function PUT(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...updatedTransaction,
-        amount: Number(updatedTransaction.amount),
-        balanceAfter: Number(updatedTransaction.balanceAfter),
-      },
+    return successResponse({
+      ...updatedTransaction,
+      amount: Number(updatedTransaction.amount),
+      balanceAfter: Number(updatedTransaction.balanceAfter),
     })
   } catch (error) {
     logError("Error updating bank transaction", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to update bank transaction" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to update bank transaction")
   }
 }

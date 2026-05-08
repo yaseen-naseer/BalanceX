@@ -35,8 +35,9 @@ export default function ImportPage() {
 
     const parseFile = useCallback(async (file: File) => {
         try {
-            // Dynamic import of xlsx library
-            const XLSX = await import('xlsx');
+            // Dynamic import of xlsx library (community fork — drop-in replacement
+            // for `xlsx` without the upstream Prototype Pollution / ReDoS CVEs).
+            const XLSX = await import('@e965/xlsx');
             const data = await file.arrayBuffer();
             const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
@@ -117,15 +118,14 @@ export default function ImportPage() {
 
         setIsImporting(true);
         try {
-            const result = await api.post('/api/import', {
+            const result = await api.post<{ message?: string }>('/api/import', {
                 date: format(selectedDate, 'yyyy-MM-dd'),
                 rows: preview.rows,
                 totals: preview.totals,
             });
 
-            const resAny = result as unknown as Record<string, unknown>;
             if (result.success) {
-                toast.success((resAny.message as string) || 'Data imported successfully');
+                toast.success(result.data?.message || 'Data imported successfully');
                 setPreview(null);
                 router.push(`/daily-entry?date=${format(selectedDate, 'yyyy-MM-dd')}`);
             } else {

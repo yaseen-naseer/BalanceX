@@ -2,10 +2,7 @@
 
 import { useState, useCallback } from "react"
 import type { DailyEntryWithRelations, CreateDailyEntryDto, UpdateDailyEntryDto } from "@/types"
-import type {
-  Category,
-  LocalEntryData,
-} from "@/components/daily-entry/types"
+import type { LocalEntryData } from "@/components/daily-entry/types"
 import { CATEGORIES } from "@/components/daily-entry/types"
 import type { ValidationMessage, ValidationResult } from "./use-daily-entry-validation"
 
@@ -46,14 +43,21 @@ export function useDailyEntrySubmission({
   const buildEntryData = useCallback((): CreateDailyEntryDto => {
     return {
       date,
+      // Dollar amounts (cash/transfer/credit) are server-managed:
+      //   - Cash & transfer: synced from SaleLineItem rows by `syncCellTotal`
+      //     on every line-item add/edit/delete.
+      //   - Credit: derived from the linked CreditSale rows (each sale's
+      //     amount is reflected in DailyEntryCategory.consumer/corporateCredit
+      //     via the credit-sale create flow).
+      // Cells are read-only in the UI (the line-items refactor removed direct
+      // value editing), so `localData.categories[X].<dollarField>` is always
+      // stale relative to the synced DB values. Sending those back here would
+      // overwrite the server-managed totals with zeros — that was the
+      // "day-detail shows zeros after submit" bug. Only `quantity` is
+      // user-editable in the categories grid; everything else is omitted so
+      // Prisma `update()` leaves the existing values untouched.
       categories: CATEGORIES.map((cat) => ({
         category: cat.key,
-        consumerCash: localData.categories[cat.key].consumerCash,
-        consumerTransfer: localData.categories[cat.key].consumerTransfer,
-        consumerCredit: ['DHIRAAGU_BILLS', 'WHOLESALE_RELOAD'].includes(cat.key) ? localData.categories[cat.key].consumerCredit : 0,
-        corporateCash: cat.key === 'DHIRAAGU_BILLS' ? localData.categories[cat.key].corporateCash : 0,
-        corporateTransfer: cat.key === 'DHIRAAGU_BILLS' ? localData.categories[cat.key].corporateTransfer : 0,
-        corporateCredit: cat.key === 'DHIRAAGU_BILLS' ? localData.categories[cat.key].corporateCredit : 0,
         quantity: localData.categories[cat.key].quantity,
       })),
       cashDrawer: {

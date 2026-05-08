@@ -50,9 +50,13 @@ export function useSaleLineItems(dailyEntryId: string | null): UseSaleLineItemsR
   const fetchedRef = useRef<string | null>(null)
   const seqRef = useRef(0)
 
-  // Abort/discard stale responses on unmount
+  // Abort/discard stale responses on unmount.
+  // We intentionally read `seqRef.current` at cleanup time (post-unmount counter)
+  // rather than snapshotting at effect-run time — the increment is the cleanup
+  // operation. The lint rule's "snapshot the ref" remediation is the wrong shape here.
   useEffect(() => {
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       seqRef.current++
     }
   }, [])

@@ -89,25 +89,25 @@ export function useDailyEntryCalculations({
     }
   }, [localData, totalTopups, reloadSalesTotal, totals.totalCash, calculationData])
 
-  // Credit data — per type
-  const linkedConsumerCreditTotal = useMemo(() => {
-    if (!entry?.creditSales) return 0
-    return entry.creditSales
-      .filter((s) => s.customer.type === 'CONSUMER')
-      .reduce((sum, s) => sum + Number(s.amount), 0)
-  }, [entry?.creditSales])
+  // Credit data — per type. The React Compiler memoises these automatically,
+  // so we just write plain expressions rather than manual `useMemo` calls
+  // (which previously couldn't preserve their memoisation because the inferred
+  // and manual dep arrays diverged).
+  const creditSales = entry?.creditSales
 
-  const linkedCorporateCreditTotal = useMemo(() => {
-    if (!entry?.creditSales) return 0
-    return entry.creditSales
-      .filter((s) => s.customer.type === 'CORPORATE')
-      .reduce((sum, s) => sum + Number(s.amount), 0)
-  }, [entry?.creditSales])
+  const linkedConsumerCreditTotal = creditSales
+    ? creditSales
+        .filter((s) => s.customer.type === "CONSUMER")
+        .reduce((sum, s) => sum + Number(s.amount), 0)
+    : 0
 
-  const linkedCreditTotal = useMemo(
-    () => linkedConsumerCreditTotal + linkedCorporateCreditTotal,
-    [linkedConsumerCreditTotal, linkedCorporateCreditTotal]
-  )
+  const linkedCorporateCreditTotal = creditSales
+    ? creditSales
+        .filter((s) => s.customer.type === "CORPORATE")
+        .reduce((sum, s) => sum + Number(s.amount), 0)
+    : 0
+
+  const linkedCreditTotal = linkedConsumerCreditTotal + linkedCorporateCreditTotal
 
   return {
     totals,

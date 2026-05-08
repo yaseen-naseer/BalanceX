@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
 import { hasPermission, type Permission } from "@/lib/permissions"
+import { hashForLog } from "@/lib/logger"
 import type { UserRole } from "@prisma/client"
 
 export interface AuthenticatedUser {
@@ -49,7 +50,7 @@ export async function requirePermission(permission: Permission): Promise<AuthRes
   }
 
   if (!hasPermission(authResult.user.role, permission)) {
-    console.warn(`[AUTH] Permission denied: user=${authResult.user.username} role=${authResult.user.role} permission=${permission} at ${new Date().toISOString()}`)
+    console.warn(`[AUTH] Permission denied: userHash=${hashForLog(authResult.user.id)} role=${authResult.user.role} permission=${permission} at ${new Date().toISOString()}`)
     return {
       authenticated: true,
       user: authResult.user,

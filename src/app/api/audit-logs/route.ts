@@ -42,19 +42,10 @@ export async function GET(request: NextRequest) {
 
     const rows = logs.map((log) => {
       const user = log.userId ? userMap.get(log.userId) : undefined
-      let parsedDetails: unknown = null
-      if (log.details) {
-        try {
-          parsedDetails = JSON.parse(log.details)
-        } catch {
-          parsedDetails = log.details
-        }
-      }
       return {
         ...log,
         userName: user?.name ?? null,
         userUsername: user?.username ?? null,
-        details: parsedDetails,
       }
     })
 

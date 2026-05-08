@@ -1,12 +1,14 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
-import { getAuthenticatedUser, requirePermission } from "@/lib/api-auth"
+import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { CategoryType } from "@prisma/client"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
-import { createDailyEntrySchema, validateRequestBody, validateDate } from "@/lib/validations"
+import { createDailyEntrySchema, validateRequestBody } from "@/lib/validations"
 import { createAuditLog } from "@/lib/audit"
 import { logError } from "@/lib/logger"
+import { ApiErrors, successResponse, paginatedResponse } from "@/lib/api-response"
+import { getSystemStartDate } from "@/lib/system-date"
 
 // GET /api/daily-entries - List daily entries
 export async function GET(request: NextRequest) {
@@ -30,26 +32,17 @@ export async function GET(request: NextRequest) {
       // Validate date format
       const parsedDate = new Date(date)
       if (isNaN(parsedDate.getTime())) {
-        return NextResponse.json(
-          { success: false, error: "Invalid date format" },
-          { status: 400 }
-        )
+        return ApiErrors.badRequest("Invalid date format")
       }
       where.date = { equals: parsedDate }
     } else if (month) {
       // Validate month format (YYYY-MM)
       if (!/^\d{4}-\d{2}$/.test(month)) {
-        return NextResponse.json(
-          { success: false, error: "Invalid month format. Expected YYYY-MM" },
-          { status: 400 }
-        )
+        return ApiErrors.badRequest("Invalid month format. Expected YYYY-MM")
       }
       const [year, monthNum] = month.split("-").map(Number)
       if (monthNum < 1 || monthNum > 12) {
-        return NextResponse.json(
-          { success: false, error: "Invalid month value" },
-          { status: 400 }
-        )
+        return ApiErrors.badRequest("Invalid month value")
       }
       const startDate = new Date(year, monthNum - 1, 1)
       const endDate = new Date(year, monthNum, 0)
@@ -81,17 +74,10 @@ export async function GET(request: NextRequest) {
     // Serialize Decimal values to numbers before sending response
     const serializedEntries = entries.map(entry => convertPrismaDecimals(entry))
 
-    return NextResponse.json({
-      success: true,
-      data: serializedEntries,
-      pagination: { total, limit, offset },
-    })
+    return paginatedResponse(serializedEntries, { total, limit, offset })
   } catch (error) {
     logError("Error fetching daily entries", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch daily entries" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch daily entries")
   }
 }
 
@@ -113,10 +99,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!userExists) {
-      return NextResponse.json(
-        { success: false, error: "Session expired. Please logout and login again." },
-        { status: 401 }
-      )
+      return ApiErrors.sessionExpired()
     }
 
     const entryDate = new Date(body.date)
@@ -126,10 +109,22 @@ export async function POST(request: NextRequest) {
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
     if (entryDate > today) {
-      return NextResponse.json(
-        { success: false, error: "Cannot create a daily entry for a future date" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Cannot create a daily entry for a future date")
+    }
+
+    // Reject backdated entries before the system start date. Closes the race
+    // condition where the client-side picker briefly allows past dates while
+    // `useSystemStartDate()` is still fetching `/api/system-date` (`null`
+    // initially, before/disabled clauses fail-open).
+    const systemStartDate = await getSystemStartDate()
+    if (systemStartDate) {
+      const floor = new Date(systemStartDate)
+      floor.setUTCHours(0, 0, 0, 0)
+      if (entryDate < floor) {
+        return ApiErrors.badRequest(
+          `Cannot create a daily entry before the system start date (${floor.toISOString().slice(0, 10)})`
+        )
+      }
     }
 
     // Check if entry already exists
@@ -138,10 +133,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingEntry) {
-      return NextResponse.json(
-        { success: false, error: "Entry for this date already exists" },
-        { status: 409 }
-      )
+      return ApiErrors.conflict("Entry for this date already exists")
     }
 
     // Create the entry with related data
@@ -210,12 +202,9 @@ export async function POST(request: NextRequest) {
       details: { date: body.date },
     })
 
-    return NextResponse.json({ success: true, data: serializedEntry }, { status: 201 })
+    return successResponse(serializedEntry, 201)
   } catch (error) {
     logError("Error creating daily entry", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to create daily entry" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to create daily entry")
   }
 }

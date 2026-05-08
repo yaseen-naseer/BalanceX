@@ -5,11 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Database, Download } from 'lucide-react'
 import { toast } from 'sonner'
 
-export interface DataManagementSectionProps {
-  isOwner: boolean
-}
-
-export function DataManagementSection({ isOwner }: DataManagementSectionProps) {
+export function DataManagementSection() {
   const handleExportData = async (format: 'json' | 'csv') => {
     try {
       const response = await fetch(`/api/export?format=${format}`)

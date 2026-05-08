@@ -90,7 +90,9 @@ export default function DayDetailPage() {
                   mode="single"
                   selected={new Date(currentDate)}
                   onSelect={(date) => date && setCurrentDate(format(date, 'yyyy-MM-dd'))}
-                  disabled={{ after: new Date(), ...(systemStartDate && { before: systemStartDate }) }}
+                  // Fail-closed: when `systemStartDate` is null (fetch in flight),
+                  // `before` defaults to today so all past dates stay disabled.
+                  disabled={{ after: new Date(), before: systemStartDate ?? new Date() }}
                   initialFocus
                 />
               </PopoverContent>

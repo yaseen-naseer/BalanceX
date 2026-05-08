@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useDialogState } from '@/hooks/use-dialog-state'
 import {
   Dialog,
   DialogContent,
@@ -30,7 +31,7 @@ export interface AddTransactionDialogProps {
 }
 
 export function AddTransactionDialog({ onAdd }: AddTransactionDialogProps) {
-  const [open, setOpen] = useState(false)
+  const dialog = useDialogState()
   const [formData, setFormData] = useState<TransactionFormData>(initialTransactionForm)
   const { addTransaction } = useBank()
   const systemStartDate = useSystemStartDate()
@@ -62,13 +63,13 @@ export function AddTransactionDialog({ onAdd }: AddTransactionDialogProps) {
         `${formData.type === 'DEPOSIT' ? 'Deposit' : 'Withdrawal'} of ${fmtCurrency(amount)} ${CURRENCY_CODE} recorded`
       )
       setFormData(initialTransactionForm)
-      setOpen(false)
+      dialog.close()
       onAdd()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={dialog.isOpen} onOpenChange={dialog.onOpenChange}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
@@ -95,7 +96,9 @@ export function AddTransactionDialog({ onAdd }: AddTransactionDialogProps) {
                   mode="single"
                   selected={formData.date}
                   onSelect={(date) => date && setFormData({ ...formData, date })}
-                  disabled={{ after: new Date(), ...(systemStartDate && { before: systemStartDate }) }}
+                  // Fail-closed: when `systemStartDate` is null (fetch in flight),
+                  // `before` defaults to today so all past dates stay disabled.
+                  disabled={{ after: new Date(), before: systemStartDate ?? new Date() }}
                   initialFocus
                 />
               </PopoverContent>
@@ -192,7 +195,7 @@ export function AddTransactionDialog({ onAdd }: AddTransactionDialogProps) {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={dialog.close}>
             Cancel
           </Button>
           <Button onClick={handleSubmit}>Add Transaction</Button>

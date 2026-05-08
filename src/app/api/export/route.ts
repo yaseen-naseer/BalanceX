@@ -3,6 +3,8 @@ import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { logError } from "@/lib/logger"
 import prisma from "@/lib/db"
+import { ApiErrors } from "@/lib/api-response"
+import { dateParamSchema } from "@/lib/validations/schemas"
 import type {
   DailyEntry,
   DailyEntryCashDrawer,
@@ -51,8 +53,26 @@ export async function GET(request: NextRequest) {
 
     // D7: Parse optional date range filters and enforce row limits
     const EXPORT_LIMIT = 50000
-    const fromDate = searchParams.get("from") ? new Date(searchParams.get("from")!) : undefined
-    const toDate = searchParams.get("to") ? new Date(searchParams.get("to")!) : undefined
+    const fromRaw = searchParams.get("from")
+    const toRaw = searchParams.get("to")
+
+    let fromDate: Date | undefined
+    if (fromRaw !== null) {
+      const v = dateParamSchema.safeParse(fromRaw)
+      if (!v.success) {
+        return ApiErrors.badRequest(`Invalid 'from' date: ${v.error.issues[0]?.message ?? "expected YYYY-MM-DD"}`)
+      }
+      fromDate = new Date(v.data)
+    }
+
+    let toDate: Date | undefined
+    if (toRaw !== null) {
+      const v = dateParamSchema.safeParse(toRaw)
+      if (!v.success) {
+        return ApiErrors.badRequest(`Invalid 'to' date: ${v.error.issues[0]?.message ?? "expected YYYY-MM-DD"}`)
+      }
+      toDate = new Date(v.data)
+    }
     const dateFilter = {
       ...(fromDate && { gte: fromDate }),
       ...(toDate && { lte: toDate }),

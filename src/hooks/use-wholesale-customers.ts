@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 import { useApiClient } from "./use-api-client"
 import type { WholesaleCustomerData, CreateWholesaleCustomerDto, WholesaleDiscountTierData } from "@/types"
-import { GST_MULTIPLIER } from "@/lib/constants"
+import { GST_MULTIPLIER, WHOLESALE_BASE_MIN_CASH } from "@/lib/constants"
 
 export interface UseWholesaleCustomersReturn {
   customers: WholesaleCustomerData[]
@@ -148,6 +148,6 @@ export function useWholesaleCustomers(): UseWholesaleCustomersReturn {
     refreshCustomers,
     getDiscount,
     calculateReload,
-    minCashAmount: minCashAmount === Infinity ? 500 : minCashAmount,
+    minCashAmount: minCashAmount === Infinity ? WHOLESALE_BASE_MIN_CASH : minCashAmount,
   }
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useDialogState } from '@/hooks/use-dialog-state'
 import {
   Dialog,
   DialogContent,
@@ -49,7 +50,7 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
   const api = useApiClient()
   const { isOwner } = useAuth()
   const wholesale = useWholesaleCustomers()
-  const [open, setOpen] = useState(false)
+  const dialog = useDialogState()
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false)
   const [showLimitWarning, setShowLimitWarning] = useState(false)
 
@@ -81,10 +82,12 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
   }, [dailyEntryId])
 
   useEffect(() => {
-    if (open) {
+    if (dialog.isOpen) {
       fetchCustomers()
     }
-  }, [open])
+    // fetchCustomers is intentionally re-defined per render; we only re-fetch when the dialog opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialog.isOpen])
 
   const fetchCustomers = async () => {
     setIsLoadingCustomers(true)
@@ -126,8 +129,9 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
     setSearchQuery('')
   }
 
+  // Wraps useDialogState's onOpenChange to also reset the credit-sale form on close.
   const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen)
+    dialog.onOpenChange(newOpen)
     if (!newOpen) {
       resetForm()
     }
@@ -275,7 +279,7 @@ export function CreditSaleDialog({ dailyEntryId, onSaleAdded, onSaveDraft, disab
 
   return (
     <>
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog open={dialog.isOpen} onOpenChange={handleOpenChange}>
         <DialogTrigger asChild>
           <Button variant="outline" size="sm" className="gap-1" disabled={disabled}>
             <Plus className="h-3 w-3" />

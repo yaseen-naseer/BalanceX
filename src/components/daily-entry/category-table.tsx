@@ -33,7 +33,6 @@ export interface CategoryTableProps {
   localData: LocalEntryData
   totals: TotalsData
   isReadOnly: boolean
-  onValueChange: (category: Category, customerType: CustomerType, paymentMethod: PaymentMethod, value: number) => void
   onQuantityChange: (category: Category, value: number) => void
   getCategoryTotal: (category: Category) => number
   // Line item props
@@ -60,7 +59,6 @@ export function CategoryTable({
   localData,
   totals,
   isReadOnly,
-  onValueChange,
   onQuantityChange,
   getCategoryTotal,
   dailyEntryId,

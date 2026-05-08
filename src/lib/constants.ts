@@ -28,6 +28,14 @@ export const GST_MULTIPLIER = 1 + GST_RATE
 export const DEALER_DISCOUNT_RATE = 0.08
 
 /**
+ * Wholesale discount tier base — minimum cash amount for tier 1 (6% discount).
+ * Tier 1 must equal this exactly, and no other active tier may go below it.
+ * Used by the tier seed defaults, the PATCH validators, and as the UI fallback
+ * when no active tiers exist.
+ */
+export const WHOLESALE_BASE_MIN_CASH = 500
+
+/**
  * Dhiraagu wallet top-up factor.
  * paid = reload_value × (1 - DEALER_DISCOUNT_RATE) × (1 + GST_RATE)
  * paid = reload_value × 0.9936

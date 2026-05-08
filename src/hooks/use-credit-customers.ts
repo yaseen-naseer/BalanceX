@@ -37,14 +37,19 @@ export function useCreditCustomers(): UseCreditCustomersReturn {
   ): Promise<CreditCustomerWithBalance | null> => {
     setIsLoading(true)
     setError(null)
-    const result = await api.post<CreditCustomerWithBalance>("/api/credit-customers", data)
-    if (result.success && result.data) {
-      setCustomers((prev) => [...prev, result.data!])
-      return result.data
+    try {
+      const result = await api.post<CreditCustomerWithBalance>("/api/credit-customers", data)
+      if (result.success && result.data) {
+        setCustomers((prev) => [...prev, result.data!])
+        return result.data
+      }
+      setError(result.error || "Failed to create customer")
+      return null
+    } finally {
+      // Always reset — without this the table stays in skeleton state and the optimistically
+      // added row never becomes visible until the next remount/refresh.
+      setIsLoading(false)
     }
-    setError(result.error || "Failed to create customer")
-    setIsLoading(false)
-    return null
   }, [api])
 
   const updateCustomer = useCallback(async (
@@ -53,16 +58,19 @@ export function useCreditCustomers(): UseCreditCustomersReturn {
   ): Promise<boolean> => {
     setIsLoading(true)
     setError(null)
-    const result = await api.patch<CreditCustomerWithBalance>(`/api/credit-customers/${id}`, data)
-    if (result.success && result.data) {
-      setCustomers((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, ...result.data } : c))
-      )
-      return true
+    try {
+      const result = await api.patch<CreditCustomerWithBalance>(`/api/credit-customers/${id}`, data)
+      if (result.success && result.data) {
+        setCustomers((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, ...result.data } : c))
+        )
+        return true
+      }
+      setError(result.error || "Failed to update customer")
+      return false
+    } finally {
+      setIsLoading(false)
     }
-    setError(result.error || "Failed to update customer")
-    setIsLoading(false)
-    return false
   }, [api])
 
   const recordSettlement = useCallback(async (
@@ -71,14 +79,17 @@ export function useCreditCustomers(): UseCreditCustomersReturn {
   ): Promise<boolean> => {
     setIsLoading(true)
     setError(null)
-    const result = await api.post(`/api/credit-customers/${customerId}`, data)
-    if (result.success) {
-      await fetchCustomers()
-      return true
+    try {
+      const result = await api.post(`/api/credit-customers/${customerId}`, data)
+      if (result.success) {
+        await fetchCustomers()
+        return true
+      }
+      setError(result.error || "Failed to record settlement")
+      return false
+    } finally {
+      setIsLoading(false)
     }
-    setError(result.error || "Failed to record settlement")
-    setIsLoading(false)
-    return false
   }, [api, fetchCustomers])
 
   // Initial data fetch - using ref to prevent double-fetch in StrictMode

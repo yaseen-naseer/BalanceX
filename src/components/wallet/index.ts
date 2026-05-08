@@ -10,5 +10,3 @@ export type { TodayActivityCardProps } from './today-activity-card'
 
 export { TopupHistoryTable } from './topup-history-table'
 export type { TopupHistoryTableProps } from './topup-history-table'
-
-export { WalletOpeningBalanceDialog } from './opening-balance-dialog'

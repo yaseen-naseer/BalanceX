@@ -3,9 +3,10 @@ import { prisma } from '@/lib/db'
 import { getAuthenticatedUser, requirePermission } from '@/lib/api-auth'
 import { PERMISSIONS } from '@/lib/permissions'
 import { canEditDailyEntry } from '@/lib/permissions'
-import { DailyEntryStatus } from '@prisma/client'
+import { getBusinessRules } from '@/lib/business-rules'
+import { DailyEntryStatus, Prisma } from '@prisma/client'
 import { validateBeforeSubmit } from '@/lib/validations/daily-entry'
-import { updateDailyEntrySchema, validateRequestBody } from '@/lib/validations'
+import { updateDailyEntrySchema, validateDate, validateRequestBody } from '@/lib/validations'
 import { successResponse, ApiErrors } from '@/lib/api-response'
 import { logError } from '@/lib/logger'
 import {
@@ -32,8 +33,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   if (auth.error) return auth.error
 
   const { date } = await params
-  const entryDate = new Date(date)
-  entryDate.setUTCHours(0, 0, 0, 0)
+  const dateValidation = validateDate(date)
+  if ("error" in dateValidation) return dateValidation.error
+  const entryDate = dateValidation.date
 
   try {
     const entry = await prisma.dailyEntry.findUnique({
@@ -88,8 +90,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   if (auth.error) return auth.error
 
   const { date } = await params
-  const entryDate = new Date(date)
-  entryDate.setUTCHours(0, 0, 0, 0)
+  const dateValidation = validateDate(date)
+  if ("error" in dateValidation) return dateValidation.error
+  const entryDate = dateValidation.date
 
   try {
     const existingEntry = await prisma.dailyEntry.findUnique({
@@ -101,9 +104,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return ApiErrors.notFound('Entry')
     }
 
-    // Check edit permissions
+    // Check edit permissions (uses owner-tunable accountant window from BusinessRulesSettings).
     const isOwnEntry = existingEntry.createdBy === auth.user!.id
-    const editCheck = canEditDailyEntry(auth.user!.role, entryDate, isOwnEntry)
+    const rules = await getBusinessRules()
+    const editCheck = canEditDailyEntry(auth.user!.role, entryDate, isOwnEntry, {
+      accountantEditWindowDays: rules.accountantEditWindowDays,
+    })
 
     if (!editCheck.canEdit) {
       return ApiErrors.forbidden(editCheck.reason || 'Cannot edit this entry')
@@ -125,13 +131,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           where: { id: existingEntry.id },
           include: fullEntryInclude,
         })
-        const snapshotBefore = JSON.stringify(convertPrismaDecimals(fullEntry))
         await prisma.dailyEntryAmendment.create({
           data: {
             dailyEntryId: existingEntry.id,
             reason: 'Owner direct edit on submitted entry',
             reopenedBy: auth.user!.id,
-            snapshotBefore,
+            snapshotBefore: convertPrismaDecimals(fullEntry) as Prisma.InputJsonValue,
           },
         })
       }
@@ -213,7 +218,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     // Handle audit logging and amendment closure on submission
     if (body.status === 'SUBMITTED') {
       const serializedFinal = convertPrismaDecimals(finalEntry)
-      const snapshotAfter = JSON.stringify(serializedFinal)
 
       // Find open amendment (no resubmittedAt) for this entry
       const openAmendment = await prisma.dailyEntryAmendment.findFirst({
@@ -229,7 +233,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             data: {
               resubmittedBy: auth.user!.id,
               resubmittedAt: new Date(),
-              snapshotAfter,
+              snapshotAfter: serializedFinal as Prisma.InputJsonValue,
             },
           }),
           prisma.auditLog.create({
@@ -237,7 +241,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
               action: 'DAILY_ENTRY_AMENDED',
               userId: auth.user!.id,
               targetId: existingEntry.id,
-              details: JSON.stringify({ date }),
+              details: { date },
             },
           }),
         ])
@@ -258,7 +262,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             action: 'DAILY_ENTRY_SUBMITTED',
             userId: auth.user!.id,
             targetId: existingEntry.id,
-            details: JSON.stringify({
+            // 3.2: details is `jsonb` — pass the structured object directly,
+            // not a JSON-stringified blob.
+            details: {
               date,
               totalCash,
               totalTransfer,
@@ -267,7 +273,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
               cashVariance: cashDrawer ? Number(cashDrawer.variance || 0) : null,
               walletVariance: wallet ? Number(wallet.variance || 0) : null,
               categoryCount: categories.length,
-            }),
+            },
           },
         })
       }

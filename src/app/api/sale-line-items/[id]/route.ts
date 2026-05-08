@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { getAuthenticatedUser } from "@/lib/api-auth"
 import { canEditDailyEntry } from "@/lib/permissions"
+import { getBusinessRules } from "@/lib/business-rules"
 import { successResponse, ApiErrors } from "@/lib/api-response"
 import { updateSaleLineItemSchema, validateRequestBody } from "@/lib/validations"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
@@ -41,7 +42,10 @@ export async function PATCH(
     }
 
     const isOwnEntry = lineItem.dailyEntry.createdBy === auth.user!.id
-    const editPerm = canEditDailyEntry(auth.user!.role, lineItem.dailyEntry.date, isOwnEntry)
+    const rules = await getBusinessRules()
+    const editPerm = canEditDailyEntry(auth.user!.role, lineItem.dailyEntry.date, isOwnEntry, {
+      accountantEditWindowDays: rules.accountantEditWindowDays,
+    })
     if (!editPerm.canEdit) {
       return ApiErrors.forbidden(editPerm.reason || "Cannot edit this entry")
     }
@@ -94,10 +98,11 @@ export async function PATCH(
       return { updated: upd, cellTotal: total, cellCount: count }
     })
 
-    // Update linked bank deposit if transfer amount changed
+    // Update linked bank deposit if transfer amount changed.
+    // Pass the FK (S1.b) so the lookup doesn't rely on notes substring matching.
     if (lineItem.paymentMethod === "TRANSFER" && amount !== undefined && amount !== previousAmount) {
       try {
-        await updateTransferBankDeposit(id, amount)
+        await updateTransferBankDeposit(id, amount, lineItem.bankTransactionId)
       } catch (bankErr) {
         logError("Bank sync error on transfer sale edit (non-fatal)", bankErr)
       }
@@ -176,9 +181,12 @@ export async function DELETE(
       return ApiErrors.badRequest("Cannot delete line items from a submitted entry")
     }
 
-    // Check edit permissions
+    // Check edit permissions (uses owner-tunable accountant window).
     const isOwnEntry = lineItem.dailyEntry.createdBy === auth.user!.id
-    const editPerm = canEditDailyEntry(auth.user!.role, lineItem.dailyEntry.date, isOwnEntry)
+    const rules = await getBusinessRules()
+    const editPerm = canEditDailyEntry(auth.user!.role, lineItem.dailyEntry.date, isOwnEntry, {
+      accountantEditWindowDays: rules.accountantEditWindowDays,
+    })
     if (!editPerm.canEdit) {
       return ApiErrors.forbidden(editPerm.reason || "Cannot edit this entry")
     }
@@ -232,10 +240,12 @@ export async function DELETE(
       return { cellTotal: total, cellCount: count }
     })
 
-    // Delete linked bank deposit for transfer sales
+    // Delete linked bank deposit for transfer sales.
+    // We captured `bankTransactionId` from the line item BEFORE the deletion
+    // transaction above, so we can pass it to the helper to use the FK lookup (S1.b).
     if (lineItem.paymentMethod === "TRANSFER") {
       try {
-        await deleteTransferBankDeposit(id)
+        await deleteTransferBankDeposit(id, lineItem.bankTransactionId)
       } catch (bankErr) {
         logError("Bank sync error on transfer sale delete (non-fatal)", bankErr)
       }

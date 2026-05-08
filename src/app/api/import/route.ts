@@ -1,28 +1,12 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { CategoryType } from "@prisma/client"
 import { logError } from "@/lib/logger"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
-
-interface ImportedRow {
-  siteName: string
-  paymentMethod: string
-  customerType: string
-  paymentType: string
-  amount: number
-}
-
-interface ImportRequest {
-  date: string
-  rows: ImportedRow[]
-  totals: {
-    cash: number
-    transfer: number
-    total: number
-  }
-}
+import { importDataSchema, validateRequestBody } from "@/lib/validations"
+import { ApiErrors, successResponse } from "@/lib/api-response"
 
 // Map payment types to categories
 function mapPaymentTypeToCategory(paymentType: string): CategoryType {
@@ -57,22 +41,14 @@ export async function POST(request: NextRequest) {
   })
 
   if (!userExists) {
-    return NextResponse.json(
-      { success: false, error: "Session expired. Please logout and login again." },
-      { status: 401 }
-    )
+    return ApiErrors.sessionExpired()
   }
 
   try {
-    const body: ImportRequest = await request.json()
+    const validation = await validateRequestBody(request, importDataSchema)
+    if ("error" in validation) return validation.error
+    const body = validation.data
     const { date, rows, totals } = body
-
-    if (!date || !rows || rows.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "Date and rows are required" },
-        { status: 400 }
-      )
-    }
 
     const entryDate = new Date(date)
     entryDate.setUTCHours(0, 0, 0, 0)
@@ -184,20 +160,17 @@ export async function POST(request: NextRequest) {
         userAgent: getUserAgentFromRequest(request),
       })
 
-      return NextResponse.json({
-        success: true,
-        data: {
-          entryId: existingEntry.id,
-          action: "updated",
-          totals,
-          categoriesUpdated: Object.keys(aggregated).filter(
-            (cat) =>
-              aggregated[cat as CategoryType].consumerCash > 0 ||
-              aggregated[cat as CategoryType].consumerTransfer > 0 ||
-              aggregated[cat as CategoryType].corporateCash > 0 ||
-              aggregated[cat as CategoryType].corporateTransfer > 0
-          ),
-        },
+      return successResponse({
+        entryId: existingEntry.id,
+        action: "updated" as const,
+        totals,
+        categoriesUpdated: Object.keys(aggregated).filter(
+          (cat) =>
+            aggregated[cat as CategoryType].consumerCash > 0 ||
+            aggregated[cat as CategoryType].consumerTransfer > 0 ||
+            aggregated[cat as CategoryType].corporateCash > 0 ||
+            aggregated[cat as CategoryType].corporateTransfer > 0
+        ),
         message: "Daily entry updated with imported data",
       })
     } else {
@@ -258,31 +231,25 @@ export async function POST(request: NextRequest) {
         userAgent: getUserAgentFromRequest(request),
       })
 
-      return NextResponse.json(
+      return successResponse(
         {
-          success: true,
-          data: {
-            entryId: newEntry.id,
-            action: "created",
-            totals,
-            categoriesCreated: Object.keys(aggregated).filter(
-              (cat) =>
-                aggregated[cat as CategoryType].consumerCash > 0 ||
-                aggregated[cat as CategoryType].consumerTransfer > 0 ||
-                aggregated[cat as CategoryType].corporateCash > 0 ||
-                aggregated[cat as CategoryType].corporateTransfer > 0
-            ),
-          },
+          entryId: newEntry.id,
+          action: "created" as const,
+          totals,
+          categoriesCreated: Object.keys(aggregated).filter(
+            (cat) =>
+              aggregated[cat as CategoryType].consumerCash > 0 ||
+              aggregated[cat as CategoryType].consumerTransfer > 0 ||
+              aggregated[cat as CategoryType].corporateCash > 0 ||
+              aggregated[cat as CategoryType].corporateTransfer > 0
+          ),
           message: "New daily entry created with imported data",
         },
-        { status: 201 }
+        201
       )
     }
   } catch (error) {
     logError("Error importing telco data", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to import data" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to import data")
   }
 }

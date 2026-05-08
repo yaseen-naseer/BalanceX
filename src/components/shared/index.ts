@@ -26,6 +26,18 @@ export type {
   CompactStatCardProps,
 } from "./stat-card"
 
+// Split Payment
+export { SplitPaymentInput } from "./split-payment-input"
+export type { SplitPaymentInputProps } from "./split-payment-input"
+
+// Payment Method Buttons
+export { PaymentMethodButtons } from "./payment-method-buttons"
+export type { PaymentMethodButtonsProps } from "./payment-method-buttons"
+
+// Summary Cards Grid
+export { SummaryCardsGrid } from "./summary-cards-grid"
+export type { SummaryCardsGridProps, SummaryCard } from "./summary-cards-grid"
+
 // Loading States
 export {
   LoadingState,

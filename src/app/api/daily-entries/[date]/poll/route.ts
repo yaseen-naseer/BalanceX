@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db"
 import { getAuthenticatedUser, requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { successResponse, ApiErrors } from "@/lib/api-response"
+import { validateDate } from "@/lib/validations"
 import { logError } from "@/lib/logger"
 
 interface RouteParams {
@@ -17,8 +18,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   if (auth.error) return auth.error
 
   const { date } = await params
-  const entryDate = new Date(date)
-  entryDate.setUTCHours(0, 0, 0, 0)
+  const dateValidation = validateDate(date)
+  if ("error" in dateValidation) return dateValidation.error
+  const entryDate = dateValidation.date
 
   try {
     const entry = await prisma.dailyEntry.findUnique({
@@ -96,8 +98,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   if (auth.error) return auth.error
 
   const { date } = await params
-  const entryDate = new Date(date)
-  entryDate.setUTCHours(0, 0, 0, 0)
+  const dateValidation = validateDate(date)
+  if ("error" in dateValidation) return dateValidation.error
+  const entryDate = dateValidation.date
 
   try {
     const entry = await prisma.dailyEntry.findUnique({

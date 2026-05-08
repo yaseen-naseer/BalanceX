@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
@@ -36,6 +36,21 @@ export function LoginForm() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   })
+
+  // Defense in depth: if credentials ever ended up in the URL (form fell back to
+  // native GET submit because JS hadn't hydrated), strip them immediately so they
+  // don't sit in the address bar / tab title / clipboard.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (params.has("password") || params.has("username")) {
+      params.delete("username")
+      params.delete("password")
+      const cleanQs = params.toString()
+      const newUrl = window.location.pathname + (cleanQs ? `?${cleanQs}` : "") + window.location.hash
+      window.history.replaceState(null, "", newUrl)
+    }
+  }, [])
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true)
@@ -75,7 +90,12 @@ export function LoginForm() {
         <CardDescription>Retail Finance Manager</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form
+          method="POST"
+          action="/api/auth/callback/credentials"
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-4"
+        >
           {loginError && (
             <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">
               {loginError}

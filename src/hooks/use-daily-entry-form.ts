@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import { useDailyEntry, type CalculationData } from "./use-daily-entry"
 import { useWallet } from "./use-wallet"
 import { useAuth } from "./use-auth"
@@ -9,6 +9,9 @@ import { useDailyEntryLineItems } from "./use-daily-entry-line-items"
 import { useDailyEntryCalculations } from "./use-daily-entry-calculations"
 import { useDailyEntryValidation, type ValidationMessage, type ValidationResult } from "./use-daily-entry-validation"
 import { useDailyEntrySubmission } from "./use-daily-entry-submission"
+import { useDailyEntryAutoLoad } from "./use-daily-entry-auto-load"
+import { useDailyEntryEditor } from "./use-daily-entry-editor"
+import { useBusinessRules } from "./use-business-rules"
 import { canEditDailyEntry } from "@/lib/permissions"
 import type { DailyEntryWithRelations, CreateSaleLineItemDto, SaleLineItemData } from "@/types"
 import {
@@ -18,108 +21,10 @@ import {
   type LocalEntryData,
   type TotalsData,
   type VarianceData,
-  CATEGORIES,
 } from "@/components/daily-entry/types"
 
 // Re-export types for consumers
 export type { ValidationMessage, ValidationResult }
-
-/**
- * Creates empty local data structure for form initialization
- */
-function createEmptyLocalData(): LocalEntryData {
-  const categories = {} as LocalEntryData["categories"]
-  CATEGORIES.forEach((cat) => {
-    categories[cat.key] = {
-      consumerCash: 0,
-      consumerTransfer: 0,
-      consumerCredit: 0,
-      corporateCash: 0,
-      corporateTransfer: 0,
-      corporateCredit: 0,
-      quantity: 0,
-    }
-  })
-  return {
-    categories,
-    cashDrawer: { opening: 0, bankDeposits: 0, closingActual: 0 },
-    wallet: { opening: 0, closingActual: 0 },
-    notes: "",
-  }
-}
-
-/**
- * Converts a DailyEntryWithRelations to LocalEntryData for form editing
- */
-function entryToLocalData(entry: DailyEntryWithRelations | null): LocalEntryData {
-  if (!entry) return createEmptyLocalData()
-
-  const data = createEmptyLocalData()
-
-  // Derive credit from linked credit sales, grouped by category and customer type
-  const creditByCategory = new Map<string, { consumer: number; corporate: number }>()
-  const creditCategories = ['DHIRAAGU_BILLS', 'WHOLESALE_RELOAD']
-  for (const cat of creditCategories) {
-    creditByCategory.set(cat, { consumer: 0, corporate: 0 })
-  }
-  entry.creditSales?.forEach((s) => {
-    const cat = s.category || 'DHIRAAGU_BILLS'
-    const existing = creditByCategory.get(cat)
-    if (existing) {
-      if (s.customer.type === 'CONSUMER') existing.consumer += Number(s.amount)
-      else existing.corporate += Number(s.amount)
-    }
-  })
-
-  entry.categories?.forEach((cat) => {
-    const isDhiraagu = cat.category === 'DHIRAAGU_BILLS'
-    const creditData = creditByCategory.get(cat.category)
-    data.categories[cat.category] = {
-      consumerCash: Number(cat.consumerCash),
-      consumerTransfer: Number(cat.consumerTransfer),
-      consumerCredit: creditData ? creditData.consumer : 0,
-      corporateCash: isDhiraagu ? Number(cat.corporateCash) : 0,
-      corporateTransfer: isDhiraagu ? Number(cat.corporateTransfer) : 0,
-      corporateCredit: isDhiraagu && creditData ? creditData.corporate : 0,
-      quantity: Number(cat.quantity),
-    }
-  })
-
-  // Apply credit values even for categories that don't have a DB row yet
-  for (const [catKey, creditData] of creditByCategory) {
-    const existing = entry.categories?.find((c) => c.category === catKey)
-    if (!existing && (creditData.consumer > 0 || creditData.corporate > 0)) {
-      const isDhiraagu = catKey === 'DHIRAAGU_BILLS'
-      const key = catKey as Category
-      data.categories[key] = {
-        ...data.categories[key],
-        consumerCredit: creditData.consumer,
-        corporateCredit: isDhiraagu ? creditData.corporate : 0,
-      }
-    }
-  }
-
-  if (entry.cashDrawer) {
-    data.cashDrawer = {
-      opening: Number(entry.cashDrawer.opening),
-      bankDeposits: Number(entry.cashDrawer.bankDeposits),
-      closingActual: Number(entry.cashDrawer.closingActual),
-    }
-  }
-
-  if (entry.wallet) {
-    data.wallet = {
-      opening: Number(entry.wallet.opening),
-      closingActual: Number(entry.wallet.closingActual),
-    }
-  }
-
-  if (entry.notes) {
-    data.notes = entry.notes.content || ""
-  }
-
-  return data
-}
 
 export interface UseDailyEntryFormOptions {
   date: string
@@ -161,7 +66,7 @@ export interface UseDailyEntryFormReturn {
   // Wallet opening override
   walletOpeningSource: string
   walletOpeningReason: string | null
-  overrideWalletOpening: (amount: number, reason: string) => void
+  overrideWalletOpening: (amount: number, reason: string) => Promise<boolean>
 
   // Handlers
   handleValueChange: (category: Category, customerType: CustomerType, paymentMethod: PaymentMethod, value: number) => void
@@ -193,6 +98,23 @@ export interface UseDailyEntryFormReturn {
   reopenEntry: (reason: string) => Promise<boolean>
 }
 
+/**
+ * Top-level orchestrator for the daily-entry editing flow. Composes:
+ *
+ * - `useDailyEntry` / `useWallet` — server data sources.
+ * - `useDailyEntryEditor` — local form state + edit handlers (Stage 3 extraction).
+ * - `useDailyEntryAutoLoad` — auto-fill wallet/cash openings from previous day.
+ * - `useDailyEntryLineItems` — sale-line-item CRUD bound to the current entry.
+ * - `useDailyEntryCalculations` — totals + variance + linked credit derivations.
+ * - `useDailyEntryValidation` — pre-submit validation messages.
+ * - `useDailyEntrySubmission` — saveDraft / submit / refresh / reopen mutations.
+ * - `useLivePolling` — multi-user presence + change polling.
+ *
+ * Returns a single object (`UseDailyEntryFormReturn`) consumed by the daily-entry
+ * page and pushed into the daily-entry context. Public API is intentionally wide
+ * because every section of the page reads `form.*` fields directly — preserved
+ * byte-identically across the Phase 2.5 stages.
+ */
 export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyEntryFormReturn {
   // --- Core data hooks ---
   const {
@@ -209,26 +131,37 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   } = useDailyEntry({ date })
 
   const {
-    topups,
+    openingBalance: walletOpeningBalanceSetting,
     fetchWallet,
     getTotalTopupsByDate,
     getTopupsByDate,
     getPreviousClosing,
     editTopup,
     deleteTopup,
+    setOpeningBalance: persistWalletOpeningBalance,
   } = useWallet()
 
   const { user } = useAuth()
+  const { rules: businessRules } = useBusinessRules()
 
-  // --- Form state ---
-  const [localData, setLocalData] = useState<LocalEntryData>(createEmptyLocalData())
-  const [walletAutoLoaded, setWalletAutoLoaded] = useState(false)
-  const [cashAutoLoaded, setCashAutoLoaded] = useState(false)
-  const [hasUserChanges, setHasUserChanges] = useState(false)
-  const [walletOpeningSource, setWalletOpeningSource] = useState<string>("PREVIOUS_DAY")
-  const [walletOpeningReason, setWalletOpeningReason] = useState<string | null>(null)
-  const hasUserChangesRef = useRef(false)
-  hasUserChangesRef.current = hasUserChanges
+  // --- Form state + handlers (extracted hook) ---
+  const editor = useDailyEntryEditor({
+    walletOpeningBalanceSetting,
+    persistWalletOpeningBalance,
+  })
+
+  // --- Auto-load (wallet opening from previous day, cash drawer from previous day) ---
+  const { resetAutoLoadFlags } = useDailyEntryAutoLoad({
+    isLoading,
+    entry,
+    date,
+    getPreviousClosing,
+    previousCashClosing,
+    walletOpening: editor.localData.wallet.opening,
+    cashDrawerOpening: editor.localData.cashDrawer.opening,
+    setLocalData: editor.setLocalData,
+    setHasUserChanges: editor.setHasUserChanges,
+  })
 
   // --- Line items (extracted hook) ---
   const {
@@ -243,10 +176,12 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     refreshLineItems,
   } = useDailyEntryLineItems({
     entryId: entry?.id ?? null,
-    setLocalData,
+    setLocalData: editor.setLocalData,
   })
 
   // --- Wallet data ---
+  // `getTopupsByDate` / `getTotalTopupsByDate` already close over `topups`,
+  // so listing `topups` again would be a redundant dep.
   const dayTopups = useMemo(
     () => getTopupsByDate(date).map(t => ({
       id: t.id,
@@ -256,12 +191,12 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
       notes: t.notes,
       splitGroupId: t.splitGroupId,
     })),
-    [getTopupsByDate, date, topups]
+    [getTopupsByDate, date]
   )
 
   const totalTopups = useMemo(
     () => getTotalTopupsByDate(date),
-    [getTotalTopupsByDate, date, topups]
+    [getTotalTopupsByDate, date]
   )
 
   // --- Calculations (extracted hook) ---
@@ -273,7 +208,7 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     linkedConsumerCreditTotal,
     linkedCorporateCreditTotal,
   } = useDailyEntryCalculations({
-    localData,
+    localData: editor.localData,
     calculationData,
     saleLineItems,
     totalTopups,
@@ -285,7 +220,7 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     variance,
     reloadSalesTotal,
     totalTopups,
-    walletOpening: localData.wallet.opening,
+    walletOpening: editor.localData.wallet.opening,
   })
 
   // --- Submission (extracted hook) ---
@@ -299,8 +234,8 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   } = useDailyEntrySubmission({
     date,
     entry,
-    localData,
-    walletOpeningSource,
+    localData: editor.localData,
+    walletOpeningSource: editor.walletOpeningSource,
     createEntry,
     updateEntry,
     submitEntryApi,
@@ -309,10 +244,10 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     refreshLineItems,
   })
 
-  // Wrap saveDraft to pass setHasUserChanges
+  // Wrap saveDraft to clear the dirty flag on success (via editor's setter).
   const saveDraft = useCallback(
-    () => saveDraftInternal(setHasUserChanges),
-    [saveDraftInternal]
+    () => saveDraftInternal(editor.setHasUserChanges),
+    [saveDraftInternal, editor.setHasUserChanges]
   )
 
   // --- Live polling ---
@@ -346,140 +281,32 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     }
   }, [pollUrl])
 
-  // --- Edit permissions ---
+  // --- Edit permissions (uses owner-tunable accountant window from BusinessRulesSettings) ---
   const editPermission = useMemo(() => {
     if (!user?.role) return { canEdit: false, reason: "Loading..." }
     const entryDate = new Date(date)
     const isOwnEntry = !entry || entry.createdBy === user.id
-    return canEditDailyEntry(user.role, entryDate, isOwnEntry)
-  }, [user?.role, user?.id, date, entry])
+    return canEditDailyEntry(user.role, entryDate, isOwnEntry, {
+      accountantEditWindowDays: businessRules.accountantEditWindowDays,
+    })
+  }, [user?.role, user?.id, date, entry, businessRules.accountantEditWindowDays])
 
-  // --- Sync entry → localData ---
+  // --- Sync entry → localData (skipped if user has unsaved changes; ref check inside editor) ---
   useEffect(() => {
     if (isLoading) return
-    if (hasUserChangesRef.current) return
-    setLocalData(entryToLocalData(entry))
-    setHasUserChanges(false)
-    setWalletAutoLoaded(false)
-    setCashAutoLoaded(false)
-    setWalletOpeningSource(entry?.wallet?.openingSource || "PREVIOUS_DAY")
-    setWalletOpeningReason(null)
+    const synced = editor.syncFromEntry(entry)
+    // Only allow auto-load to refire if the sync actually applied — otherwise the
+    // user's unsaved changes are still in localData and we'd over-write them.
+    if (synced) resetAutoLoadFlags()
+    // editor.syncFromEntry + resetAutoLoadFlags are stable callbacks; intentionally
+    // excluded to keep the same trigger conditions as before.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry, isLoading])
 
   // Fetch wallet when date changes
   useEffect(() => {
     fetchWallet()
   }, [date, fetchWallet])
-
-  // Auto-load wallet opening from previous day
-  const walletLoadSeqRef = useRef(0)
-  useEffect(() => {
-    const seq = ++walletLoadSeqRef.current
-    const loadPreviousClosing = async () => {
-      if (isLoading || walletAutoLoaded || localData.wallet.opening !== 0) return
-      if (entry?.wallet && entry.wallet.openingSource !== 'PREVIOUS_DAY') return
-
-      const previousData = await getPreviousClosing(date)
-      if (seq !== walletLoadSeqRef.current) return // stale, discard
-      if (previousData && previousData.previousClosing > 0) {
-        setLocalData((prev) => ({
-          ...prev,
-          wallet: { ...prev.wallet, opening: previousData.previousClosing },
-        }))
-        setWalletAutoLoaded(true)
-        if (entry) {
-          setHasUserChanges(true)
-        }
-      }
-    }
-    loadPreviousClosing()
-  }, [isLoading, entry, date, getPreviousClosing, walletAutoLoaded, localData.wallet.opening])
-
-  // Auto-load cash drawer opening from previous day's actual closing
-  useEffect(() => {
-    if (isLoading || cashAutoLoaded) return
-    // Only auto-load if opening is still 0 (not yet set by user or saved data)
-    if (localData.cashDrawer.opening !== 0) return
-    // Only auto-load if previous day was submitted and had a closing actual
-    if (previousCashClosing == null || previousCashClosing === 0) return
-
-    setLocalData((prev) => ({
-      ...prev,
-      cashDrawer: { ...prev.cashDrawer, opening: previousCashClosing },
-    }))
-    setCashAutoLoaded(true)
-    if (entry) {
-      setHasUserChanges(true)
-    }
-  }, [isLoading, entry, previousCashClosing, cashAutoLoaded, localData.cashDrawer.opening])
-
-  // --- Form field handlers ---
-  const handleValueChange = useCallback(
-    (category: Category, customerType: CustomerType, paymentMethod: PaymentMethod, value: number) => {
-      setHasUserChanges(true)
-      setLocalData((prev) => {
-        const key = `${customerType}${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}` as keyof typeof prev.categories[Category]
-        return {
-          ...prev,
-          categories: {
-            ...prev.categories,
-            [category]: { ...prev.categories[category], [key]: value },
-          },
-        }
-      })
-    },
-    []
-  )
-
-  const handleQuantityChange = useCallback((category: Category, value: number) => {
-    setHasUserChanges(true)
-    setLocalData((prev) => ({
-      ...prev,
-      categories: {
-        ...prev.categories,
-        [category]: { ...prev.categories[category], quantity: value },
-      },
-    }))
-  }, [])
-
-  const handleFieldChange = useCallback((field: string, value: number | string) => {
-    setHasUserChanges(true)
-    setLocalData((prev) => {
-      if (field === "notes") {
-        return { ...prev, notes: value as string }
-      }
-      if (field.startsWith("cashDrawer.")) {
-        const subField = field.split(".")[1] as keyof LocalEntryData["cashDrawer"]
-        return { ...prev, cashDrawer: { ...prev.cashDrawer, [subField]: value } }
-      }
-      if (field.startsWith("wallet.")) {
-        const subField = field.split(".")[1] as keyof LocalEntryData["wallet"]
-        return { ...prev, wallet: { ...prev.wallet, [subField]: value } }
-      }
-      return prev
-    })
-  }, [])
-
-  const overrideWalletOpening = useCallback((amount: number, reason: string) => {
-    setLocalData((prev) => ({
-      ...prev,
-      wallet: { ...prev.wallet, opening: amount },
-    }))
-    setWalletOpeningSource("MANUAL")
-    setWalletOpeningReason(reason)
-    setHasUserChanges(true)
-  }, [])
-
-  const getCategoryTotal = useCallback(
-    (category: Category) => {
-      const cat = localData.categories[category]
-      return (
-        cat.consumerCash + cat.consumerTransfer + cat.consumerCredit +
-        cat.corporateCash + cat.corporateTransfer + cat.corporateCredit
-      )
-    },
-    [localData]
-  )
 
   const refreshWallet = useCallback(() => {
     fetchWallet()
@@ -488,12 +315,12 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
   // --- Computed states ---
   const isSubmitted = entry?.status === "SUBMITTED"
   const isReadOnly = isSubmitted || !editPermission.canEdit
-  const isDirty = hasUserChanges && !isReadOnly
+  const isDirty = editor.hasUserChanges && !isReadOnly
   const amendments = entry?.amendments ?? []
 
   return {
     entry,
-    localData,
+    localData: editor.localData,
     calculationData,
     totals,
     variance,
@@ -523,13 +350,13 @@ export function useDailyEntryForm({ date }: UseDailyEntryFormOptions): UseDailyE
     isLive,
     lastChecked,
     activeEditors,
-    walletOpeningSource,
-    walletOpeningReason,
-    overrideWalletOpening,
-    handleValueChange,
-    handleQuantityChange,
-    handleFieldChange,
-    getCategoryTotal,
+    walletOpeningSource: editor.walletOpeningSource,
+    walletOpeningReason: editor.walletOpeningReason,
+    overrideWalletOpening: editor.overrideWalletOpening,
+    handleValueChange: editor.handleValueChange,
+    handleQuantityChange: editor.handleQuantityChange,
+    handleFieldChange: editor.handleFieldChange,
+    getCategoryTotal: editor.getCategoryTotal,
     saveDraft,
     submitEntry,
     validateBeforeSubmit,

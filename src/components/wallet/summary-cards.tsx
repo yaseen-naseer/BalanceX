@@ -1,7 +1,6 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
+import { SummaryCardsGrid } from '@/components/shared'
 
 export interface WalletSummaryCardsProps {
   totalTopupsThisMonth: number
@@ -17,52 +16,30 @@ export function WalletSummaryCards({
   isLoading,
 }: WalletSummaryCardsProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            This Month Top-ups
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-24" />
-          ) : (
-            <span className="text-2xl font-bold text-emerald-600">
-              +{totalTopupsThisMonth.toLocaleString()} MVR
-            </span>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            This Month Usage
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-24" />
-          ) : (
-            <span className="text-2xl font-bold text-rose-600">
-              -{monthlyUsage.toLocaleString()} MVR
-            </span>
-          )}
-          <p className="text-xs text-muted-foreground mt-1">Retail + Wholesale Reload Sales</p>
-        </CardContent>
-      </Card>
-      <Card className="bg-primary text-primary-foreground">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium opacity-80">Current Balance</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-8 w-24 bg-primary-foreground/20" />
-          ) : (
-            <span className="text-2xl font-bold">{currentBalance.toLocaleString()} MVR</span>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <SummaryCardsGrid
+      cards={[
+        {
+          title: 'This Month Top-ups',
+          value: `+${totalTopupsThisMonth.toLocaleString()} MVR`,
+          valueClassName: 'text-emerald-600',
+          isLoading,
+        },
+        {
+          title: 'This Month Usage',
+          value: `-${monthlyUsage.toLocaleString()} MVR`,
+          valueClassName: 'text-rose-600',
+          subtitle: 'Retail + Wholesale Reload Sales',
+          isLoading,
+        },
+        {
+          title: 'Current Balance',
+          value: `${currentBalance.toLocaleString()} MVR`,
+          cardClassName: 'bg-primary text-primary-foreground',
+          titleClassName: 'opacity-80',
+          skeletonClassName: 'bg-primary-foreground/20',
+          isLoading,
+        },
+      ]}
+    />
   )
 }

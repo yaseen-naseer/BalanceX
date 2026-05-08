@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useApiClient } from '@/hooks/use-api-client'
+import { useDialogState } from '@/hooks/use-dialog-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -82,7 +83,7 @@ function PasswordInput({
 
 export function PasswordChangeDialog({ trigger }: PasswordChangeDialogProps) {
   const api = useApiClient()
-  const [open, setOpen] = useState(false)
+  const dialog = useDialogState()
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -120,7 +121,7 @@ export function PasswordChangeDialog({ trigger }: PasswordChangeDialogProps) {
 
       if (result.success) {
         toast.success('Password changed successfully')
-        setOpen(false)
+        dialog.close()
         setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
       } else {
         toast.error(result.error || 'Failed to change password')
@@ -132,9 +133,10 @@ export function PasswordChangeDialog({ trigger }: PasswordChangeDialogProps) {
     }
   }
 
-  const handleOpenChange = (isOpen: boolean) => {
-    setOpen(isOpen)
-    if (!isOpen) {
+  // Wraps useDialogState's onOpenChange to also clear sensitive form state when closing.
+  const handleOpenChange = (next: boolean) => {
+    dialog.onOpenChange(next)
+    if (!next) {
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
     }
   }
@@ -147,7 +149,7 @@ export function PasswordChangeDialog({ trigger }: PasswordChangeDialogProps) {
   )
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={dialog.isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger || defaultTrigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>

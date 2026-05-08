@@ -29,3 +29,6 @@ export type { ReopenDialogProps } from "./reopen-dialog"
 
 export { AmendmentHistory } from "./amendment-history"
 export type { AmendmentHistoryProps } from "./amendment-history"
+
+export { EditTopupDialog } from "./edit-topup-dialog"
+export type { EditTopupDialogProps } from "./edit-topup-dialog"

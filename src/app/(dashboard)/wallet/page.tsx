@@ -13,7 +13,6 @@ import { stripRetailGst } from '@/lib/utils/balance'
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth } from 'date-fns'
 import { useWallet } from '@/hooks/use-wallet'
 import { useAuth } from '@/hooks/use-auth'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { CURRENCY_CODE, fmtCurrency } from '@/lib/constants'
 import { AddTopupDialog, WalletSummaryCards } from '@/components/wallet'
@@ -44,7 +43,6 @@ export default function WalletPage() {
     isLoading,
     error,
     fetchWallet,
-    deleteTopup,
   } = useWallet()
 
   const today = new Date()
@@ -163,13 +161,6 @@ export default function WalletPage() {
 
     return rows.sort((a, b) => b.date.localeCompare(a.date))
   }, [monthTopups, monthEntries, wholesaleReloadByEntry])
-
-  const handleDelete = async (id: string) => {
-    const result = await deleteTopup(id)
-    if (result) {
-      toast.success('Top-up deleted')
-    }
-  }
 
   const isLoaded = !isLoading && !loadingEntries
 

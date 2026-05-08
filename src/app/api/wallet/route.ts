@@ -1,17 +1,20 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import {
   createWalletTopupSchema,
+  updateWalletTopupSchema,
   walletSettingsSchema,
   validateRequestBody,
 } from "@/lib/validations"
-import { monthParamSchema } from "@/lib/validations/schemas"
+import { monthParamSchema, dateParamSchema } from "@/lib/validations/schemas"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
 import { logError } from "@/lib/logger"
 import { calculateReloadWalletCost } from "@/lib/utils/balance"
 import { getWholesaleReloadTotal } from "@/lib/utils/wholesale-reload"
+import { recalculateBankBalancesFrom, getCurrentBankBalance } from "@/lib/bank-utils"
+import { ApiErrors, successResponse, successOk } from "@/lib/api-response"
 
 // GET /api/wallet - Get wallet data and top-ups
 export async function GET(request: NextRequest) {
@@ -20,18 +23,27 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const month = searchParams.get("month") // Format: YYYY-MM
-  const limit = parseInt(searchParams.get("limit") || "50")
-  const offset = parseInt(searchParams.get("offset") || "0")
-  const previousClosingFor = searchParams.get("previousClosingFor") // Format: YYYY-MM-DD
+  // Same convention as bank: `limit=0` = "no pagination" (used by the wallet page
+  // for client-side month filtering); else clamp to [1, 5000] for DoS protection.
+  const rawLimit = parseInt(searchParams.get("limit") || "50")
+  const limit = rawLimit === 0 ? 5000 : Math.min(Math.max(rawLimit, 1), 5000)
+  const offset = Math.max(parseInt(searchParams.get("offset") || "0"), 0)
+  const previousClosingForRaw = searchParams.get("previousClosingFor") // Format: YYYY-MM-DD
 
   if (month) {
     const monthValidation = monthParamSchema.safeParse(month)
     if (!monthValidation.success) {
-      return NextResponse.json(
-        { success: false, error: "Invalid month format. Expected YYYY-MM" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Invalid month format. Expected YYYY-MM")
     }
+  }
+
+  let previousClosingFor: string | null = null
+  if (previousClosingForRaw !== null) {
+    const validation = dateParamSchema.safeParse(previousClosingForRaw)
+    if (!validation.success) {
+      return ApiErrors.badRequest(validation.error.issues[0]?.message ?? "Invalid previousClosingFor date")
+    }
+    previousClosingFor = validation.data
   }
 
   // If requesting previous day's closing for a specific date
@@ -51,13 +63,10 @@ export async function GET(request: NextRequest) {
       })
 
       if (previousEntry?.wallet && Number(previousEntry.wallet.closingActual) > 0) {
-        return NextResponse.json({
-          success: true,
-          data: {
-            previousClosing: Number(previousEntry.wallet.closingActual),
-            previousDate: previousEntry.date.toISOString(),
-            source: "PREVIOUS_DAY",
-          },
+        return successResponse({
+          previousClosing: Number(previousEntry.wallet.closingActual),
+          previousDate: previousEntry.date.toISOString(),
+          source: "PREVIOUS_DAY" as const,
         })
       }
 
@@ -68,11 +77,13 @@ export async function GET(request: NextRequest) {
       })
       const openingBalance = settings ? Number(settings.openingBalance) : 0
 
-      // All top-ups before the target date
-      const topups = await prisma.walletTopup.findMany({
+      // All top-ups before the target date — sum via aggregate (single SQL SUM
+      // instead of pulling every row + JS reduce; identical semantics).
+      const topupAgg = await prisma.walletTopup.aggregate({
+        _sum: { amount: true },
         where: { date: { lt: targetDate } },
       })
-      const totalTopups = topups.reduce((sum, t) => sum + Number(t.amount), 0)
+      const totalTopups = Number(topupAgg._sum.amount ?? 0)
 
       // All reload sales before the target date (retail reload strips 8% GST for wallet cost)
       const reloadCategories = await prisma.dailyEntryCategory.findMany({
@@ -86,20 +97,14 @@ export async function GET(request: NextRequest) {
 
       const calculatedBalance = openingBalance + totalTopups - totalReloadSales
 
-      return NextResponse.json({
-        success: true,
-        data: {
-          previousClosing: calculatedBalance,
-          previousDate: previousEntry?.date?.toISOString() || null,
-          source: previousEntry ? "PREVIOUS_DAY" : "INITIAL_SETUP",
-        },
+      return successResponse({
+        previousClosing: calculatedBalance,
+        previousDate: previousEntry?.date?.toISOString() || null,
+        source: (previousEntry ? "PREVIOUS_DAY" : "INITIAL_SETUP") as "PREVIOUS_DAY" | "INITIAL_SETUP",
       })
     } catch (error) {
       logError("Error fetching previous closing", error)
-      return NextResponse.json(
-        { success: false, error: "Failed to fetch previous closing" },
-        { status: 500 }
-      )
+      return ApiErrors.serverError("Failed to fetch previous closing")
     }
   }
 
@@ -129,14 +134,14 @@ export async function GET(request: NextRequest) {
       skip: offset,
     })
 
-    const total = await prisma.walletTopup.count({ where })
-
     // Calculate totals
     const openingBalance = settings ? Number(settings.openingBalance) : 0
 
-    // Get all top-ups
-    const allTopups = await prisma.walletTopup.findMany()
-    const totalTopups = allTopups.reduce((sum, t) => sum + Number(t.amount), 0)
+    // All-time top-up total — single SQL SUM (was reading every row + JS reduce).
+    const allTopupsAgg = await prisma.walletTopup.aggregate({
+      _sum: { amount: true },
+    })
+    const totalTopups = Number(allTopupsAgg._sum.amount ?? 0)
 
     // Get reload sales from daily entries
     const reloadCategories = await prisma.dailyEntryCategory.findMany({
@@ -209,39 +214,35 @@ export async function GET(request: NextRequest) {
       ? calculateReloadWalletCost(todayEntry.categories, todayWholesaleReload)
       : 0
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        currentBalance,
-        openingBalance,
-        openingDate: settings?.openingDate || null,
-        monthlyTopups,
-        monthlyUsage,
-        topupsBySource: {
-          cash: cashTopups,
-          bank: bankTopups,
-        },
-        todayActivity: {
-          opening: todayEntry?.wallet ? Number(todayEntry.wallet.opening) : openingBalance,
-          topups: todayTopupsTotal,
-          reloadSales: todayReloadSales,
-          expected: (todayEntry?.wallet ? Number(todayEntry.wallet.opening) : openingBalance) + todayTopupsTotal - todayReloadSales,
-          actual: todayEntry?.wallet ? Number(todayEntry.wallet.closingActual) : null,
-          variance: todayEntry?.wallet ? Number(todayEntry.wallet.variance) : null,
-        },
-        topups: topups.map((t) => ({
-          ...t,
-          amount: Number(t.amount),
-        })),
+    return successResponse({
+      currentBalance,
+      openingBalance,
+      openingDate: settings?.openingDate || null,
+      settings: settings
+        ? { ...settings, openingBalance: Number(settings.openingBalance) }
+        : null,
+      monthlyTopups,
+      monthlyUsage,
+      topupsBySource: {
+        cash: cashTopups,
+        bank: bankTopups,
       },
-      pagination: { total, limit, offset },
+      todayActivity: {
+        opening: todayEntry?.wallet ? Number(todayEntry.wallet.opening) : openingBalance,
+        topups: todayTopupsTotal,
+        reloadSales: todayReloadSales,
+        expected: (todayEntry?.wallet ? Number(todayEntry.wallet.opening) : openingBalance) + todayTopupsTotal - todayReloadSales,
+        actual: todayEntry?.wallet ? Number(todayEntry.wallet.closingActual) : null,
+        variance: todayEntry?.wallet ? Number(todayEntry.wallet.variance) : null,
+      },
+      topups: topups.map((t) => ({
+        ...t,
+        amount: Number(t.amount),
+      })),
     })
   } catch (error) {
     logError("Error fetching wallet data", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch wallet data" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch wallet data")
   }
 }
 
@@ -263,59 +264,50 @@ export async function POST(request: NextRequest) {
     })
 
     if (!userExists) {
-      return NextResponse.json(
-        { success: false, error: "Session expired. Please logout and login again." },
-        { status: 401 }
-      )
+      return ApiErrors.sessionExpired()
     }
 
-    const topup = await prisma.walletTopup.create({
-      data: {
-        amount: body.amount,
-        paidAmount: body.paidAmount ?? body.amount,
-        source: body.source,
-        notes: body.notes || null,
-        date: new Date(body.date),
-        splitGroupId: body.splitGroupId || null,
-        createdBy: auth.user!.id,
-      },
-      include: {
-        user: { select: { id: true, name: true } },
-      },
-    })
-
-    // If source is BANK, create a bank withdrawal
-    if (body.source === "BANK") {
-      const settings = await prisma.bankSettings.findFirst({
-        orderBy: { openingDate: "desc" },
-      })
-
-      const allTransactions = await prisma.bankTransaction.findMany({
-        orderBy: { date: "asc" },
-      })
-
-      let currentBalance = settings ? Number(settings.openingBalance) : 0
-      for (const tx of allTransactions) {
-        if (tx.type === "DEPOSIT") {
-          currentBalance += Number(tx.amount)
-        } else {
-          currentBalance -= Number(tx.amount)
-        }
-      }
-
-      const bankAmount = body.paidAmount ?? body.amount
-      await prisma.bankTransaction.create({
+    const topup = await prisma.$transaction(async (tx) => {
+      const created = await tx.walletTopup.create({
         data: {
-          type: "WITHDRAWAL",
-          amount: bankAmount,
-          reference: `Wallet Top-up`,
-          notes: `Auto-created from wallet top-up (reload: ${body.amount})`,
+          amount: body.amount,
+          paidAmount: body.paidAmount ?? body.amount,
+          source: body.source,
+          notes: body.notes || null,
           date: new Date(body.date),
+          splitGroupId: body.splitGroupId || null,
           createdBy: auth.user!.id,
-          balanceAfter: currentBalance - bankAmount,
+        },
+        include: {
+          user: { select: { id: true, name: true } },
         },
       })
-    }
+
+      // If source is BANK, create a bank withdrawal in the same transaction
+      // and link it via FK so future edits/deletes don't rely on content matching (S1).
+      if (body.source === "BANK") {
+        const currentBalance = await getCurrentBankBalance(tx)
+        const bankAmount = body.paidAmount ?? body.amount
+        const bankTx = await tx.bankTransaction.create({
+          data: {
+            type: "WITHDRAWAL",
+            amount: bankAmount,
+            reference: `Wallet Top-up`,
+            notes: `Auto-created from wallet top-up (reload: ${body.amount})`,
+            date: new Date(body.date),
+            createdBy: auth.user!.id,
+            balanceAfter: currentBalance - bankAmount,
+          },
+        })
+
+        await tx.walletTopup.update({
+          where: { id: created.id },
+          data: { bankTransactionId: bankTx.id },
+        })
+      }
+
+      return created
+    })
 
     await createAuditLog({
       action: "WALLET_TOPUP_ADDED",
@@ -330,22 +322,16 @@ export async function POST(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json(
+    return successResponse(
       {
-        success: true,
-        data: {
-          ...topup,
-          amount: Number(topup.amount),
-        },
+        ...topup,
+        amount: Number(topup.amount),
       },
-      { status: 201 }
+      201
     )
   } catch (error) {
     logError("Error creating wallet top-up", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to create wallet top-up" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to create wallet top-up")
   }
 }
 
@@ -362,6 +348,10 @@ export async function PATCH(request: NextRequest) {
 
     const openingDate = body.openingDate ? new Date(body.openingDate) : new Date()
     openingDate.setUTCHours(0, 0, 0, 0)
+
+    const existing = await prisma.walletSettings.findUnique({ where: { id: "default" } })
+    const oldOpeningBalance = existing ? Number(existing.openingBalance) : null
+    const oldOpeningDate = existing ? existing.openingDate.toISOString().slice(0, 10) : null
 
     const settings = await prisma.walletSettings.upsert({
       where: { id: "default" },
@@ -380,27 +370,24 @@ export async function PATCH(request: NextRequest) {
       action: "SETTINGS_CHANGED",
       userId: auth.user!.id,
       details: {
-        setting: "wallet_opening_balance",
-        openingBalance: body.openingBalance,
-        openingDate: openingDate.toISOString().slice(0, 10),
+        scope: "wallet_opening_balance",
+        oldOpeningBalance,
+        newOpeningBalance: body.openingBalance,
+        oldOpeningDate,
+        newOpeningDate: openingDate.toISOString().slice(0, 10),
+        reason: body.reason,
       },
       ipAddress: getClientIpFromRequest(request),
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...settings,
-        openingBalance: Number(settings.openingBalance),
-      },
+    return successResponse({
+      ...settings,
+      openingBalance: Number(settings.openingBalance),
     })
   } catch (error) {
     logError("Error updating wallet settings", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to update wallet settings" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to update wallet settings")
   }
 }
 
@@ -410,108 +397,90 @@ export async function PUT(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const body = await request.json()
-    const { id, amount, paidAmount, source, notes } = body
-
-    if (!id || !amount || !source) {
-      return NextResponse.json(
-        { success: false, error: "ID, amount, and source are required" },
-        { status: 400 }
-      )
-    }
+    const validation = await validateRequestBody(request, updateWalletTopupSchema)
+    if ("error" in validation) return validation.error
+    const { id, amount, paidAmount, source, notes } = validation.data
 
     const topup = await prisma.walletTopup.findUnique({ where: { id } })
     if (!topup) {
-      return NextResponse.json(
-        { success: false, error: "Top-up not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Top-up")
     }
 
     // Block edits on split payments
     if (topup.splitGroupId) {
-      return NextResponse.json(
-        { success: false, error: "Cannot edit split payments. Delete and re-add instead." },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Cannot edit split payments. Delete and re-add instead.")
     }
 
     const oldSource = topup.source
     const oldAmount = Number(topup.amount)
-    const newSource = source === "Cash" ? "CASH" : source === "BANK" ? "BANK" : source
+    const newSource = source
     const newPaidAmount = paidAmount ?? amount
 
-    // If old source was BANK, remove the old bank withdrawal
-    if (oldSource === "BANK") {
-      const bankTx = await prisma.bankTransaction.findFirst({
-        where: {
-          type: "WITHDRAWAL",
-          amount: topup.paidAmount ?? topup.amount,
-          date: topup.date,
-          reference: "Wallet Top-up",
-        },
-      })
-      if (bankTx) {
-        await prisma.bankTransaction.delete({ where: { id: bankTx.id } })
-      }
-    }
-
-    // Update the top-up
-    const updated = await prisma.walletTopup.update({
-      where: { id },
-      data: {
-        amount,
-        paidAmount: newPaidAmount,
-        source: newSource,
-        notes: notes || null,
-      },
-    })
-
-    // If new source is BANK, create a new bank withdrawal
-    if (newSource === "BANK") {
-      const settings = await prisma.bankSettings.findFirst({
-        orderBy: { openingDate: "desc" },
-      })
-      const allTransactions = await prisma.bankTransaction.findMany({
-        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-      })
-      let currentBalance = settings ? Number(settings.openingBalance) : 0
-      for (const tx of allTransactions) {
-        currentBalance += tx.type === "DEPOSIT" ? Number(tx.amount) : -Number(tx.amount)
-      }
-
-      await prisma.bankTransaction.create({
-        data: {
-          type: "WITHDRAWAL",
-          amount: newPaidAmount,
-          reference: "Wallet Top-up",
-          notes: `Auto-created from wallet top-up (reload: ${amount})`,
-          date: topup.date,
-          createdBy: auth.user!.id,
-          balanceAfter: currentBalance - newPaidAmount,
-        },
-      })
-    }
-
-    // Recalculate bank balances if source changed
-    if (oldSource === "BANK" || newSource === "BANK") {
-      const settings = await prisma.bankSettings.findFirst({
-        orderBy: { openingDate: "desc" },
-      })
-      const allTransactions = await prisma.bankTransaction.findMany({
-        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-      })
-      let runningBalance = settings ? Number(settings.openingBalance) : 0
-      for (const tx of allTransactions) {
-        runningBalance += tx.type === "DEPOSIT" ? Number(tx.amount) : -Number(tx.amount)
-        if (Number(tx.balanceAfter) !== runningBalance) {
-          await prisma.bankTransaction.update({
-            where: { id: tx.id },
-            data: { balanceAfter: runningBalance },
+    const updated = await prisma.$transaction(async (tx) => {
+      // If old source was BANK, remove the old bank withdrawal.
+      // Prefer the FK (post-backfill); fall back to content match for legacy rows (S1).
+      if (oldSource === "BANK") {
+        if (topup.bankTransactionId) {
+          await tx.bankTransaction.delete({ where: { id: topup.bankTransactionId } }).catch(() => {
+            // Bank tx may have been independently deleted; safe to ignore.
           })
+        } else {
+          const bankTx = await tx.bankTransaction.findFirst({
+            where: {
+              type: "WITHDRAWAL",
+              amount: topup.paidAmount ?? topup.amount,
+              date: topup.date,
+              reference: "Wallet Top-up",
+            },
+          })
+          if (bankTx) {
+            await tx.bankTransaction.delete({ where: { id: bankTx.id } })
+          }
         }
       }
-    }
+
+      // Update the top-up. Reset bankTransactionId — it will be set below if new source is BANK.
+      const updatedTopup = await tx.walletTopup.update({
+        where: { id },
+        data: {
+          amount,
+          paidAmount: newPaidAmount,
+          source: newSource,
+          notes: notes || null,
+          bankTransactionId: null,
+        },
+      })
+
+      // If new source is BANK, create a new bank withdrawal and link the FK.
+      if (newSource === "BANK") {
+        const currentBalance = await getCurrentBankBalance(tx)
+        const bankTx = await tx.bankTransaction.create({
+          data: {
+            type: "WITHDRAWAL",
+            amount: newPaidAmount,
+            reference: "Wallet Top-up",
+            notes: `Auto-created from wallet top-up (reload: ${amount})`,
+            date: topup.date,
+            createdBy: auth.user!.id,
+            balanceAfter: currentBalance - newPaidAmount,
+          },
+        })
+
+        await tx.walletTopup.update({
+          where: { id },
+          data: { bankTransactionId: bankTx.id },
+        })
+      }
+
+      // Recalculate bank balances if source changed.
+      // Anchor = topup.date — split topups (which we don't allow editing of anyway)
+      // share a date, and a single topup edit doesn't change the date.
+      if (oldSource === "BANK" || newSource === "BANK") {
+        await recalculateBankBalancesFrom(topup.date, tx)
+      }
+
+      return updatedTopup
+    })
 
     await createAuditLog({
       action: "WALLET_TOPUP_EDITED",
@@ -527,16 +496,10 @@ export async function PUT(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json({
-      success: true,
-      data: { ...updated, amount: Number(updated.amount) },
-    })
+    return successResponse({ ...updated, amount: Number(updated.amount) })
   } catch (error) {
     logError("Error editing wallet top-up", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to edit wallet top-up" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to edit wallet top-up")
   }
 }
 
@@ -550,69 +513,66 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id")
 
     if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Top-up ID is required" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Top-up ID is required")
     }
 
     // Get the top-up first
     const topup = await prisma.walletTopup.findUnique({ where: { id } })
     if (!topup) {
-      return NextResponse.json(
-        { success: false, error: "Top-up not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Top-up")
     }
 
-    // Determine which top-ups to delete (single or entire split group)
-    const topupsToDelete = topup.splitGroupId
-      ? await prisma.walletTopup.findMany({ where: { splitGroupId: topup.splitGroupId } })
-      : [topup]
+    const topupsToDelete = await prisma.$transaction(async (tx) => {
+      // Determine which top-ups to delete (single or entire split group)
+      const toDelete = topup.splitGroupId
+        ? await tx.walletTopup.findMany({ where: { splitGroupId: topup.splitGroupId } })
+        : [topup]
 
-    // Delete associated bank withdrawals for BANK-sourced top-ups
-    for (const t of topupsToDelete) {
-      if (t.source === "BANK") {
-        const bankTx = await prisma.bankTransaction.findFirst({
-          where: {
-            type: "WITHDRAWAL",
-            amount: t.paidAmount ?? t.amount,
-            date: t.date,
-            reference: "Wallet Top-up",
-          },
-        })
-        if (bankTx) {
-          await prisma.bankTransaction.delete({ where: { id: bankTx.id } })
+      // Delete associated bank withdrawals for BANK-sourced top-ups.
+      // Prefer the FK (post-backfill); fall back to content match for legacy rows (S1).
+      for (const t of toDelete) {
+        if (t.source === "BANK") {
+          if (t.bankTransactionId) {
+            await tx.bankTransaction.delete({ where: { id: t.bankTransactionId } }).catch(() => {
+              // Bank tx may have been independently deleted; safe to ignore.
+            })
+          } else {
+            const bankTx = await tx.bankTransaction.findFirst({
+              where: {
+                type: "WITHDRAWAL",
+                amount: t.paidAmount ?? t.amount,
+                date: t.date,
+                reference: "Wallet Top-up",
+              },
+            })
+            if (bankTx) {
+              await tx.bankTransaction.delete({ where: { id: bankTx.id } })
+            }
+          }
         }
       }
-    }
 
-    // Delete the top-up(s)
-    if (topup.splitGroupId) {
-      await prisma.walletTopup.deleteMany({ where: { splitGroupId: topup.splitGroupId } })
-    } else {
-      await prisma.walletTopup.delete({ where: { id } })
-    }
-
-    // Recalculate bank balances if any BANK-sourced top-ups were deleted
-    if (topupsToDelete.some((t) => t.source === "BANK")) {
-      const settings = await prisma.bankSettings.findFirst({
-        orderBy: { openingDate: "desc" },
-      })
-      const allTransactions = await prisma.bankTransaction.findMany({
-        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-      })
-      let runningBalance = settings ? Number(settings.openingBalance) : 0
-      for (const tx of allTransactions) {
-        runningBalance += tx.type === "DEPOSIT" ? Number(tx.amount) : -Number(tx.amount)
-        if (Number(tx.balanceAfter) !== runningBalance) {
-          await prisma.bankTransaction.update({
-            where: { id: tx.id },
-            data: { balanceAfter: runningBalance },
-          })
-        }
+      // Delete the top-up(s)
+      if (topup.splitGroupId) {
+        await tx.walletTopup.deleteMany({ where: { splitGroupId: topup.splitGroupId } })
+      } else {
+        await tx.walletTopup.delete({ where: { id } })
       }
-    }
+
+      // Recalculate bank balances if any BANK-sourced top-ups were deleted.
+      // Anchor = earliest deleted topup date (split groups share a date, but
+      // taking min handles any unexpected mixed-date case defensively).
+      const deletedBankTopups = toDelete.filter((t) => t.source === "BANK")
+      if (deletedBankTopups.length > 0) {
+        const anchorDate = deletedBankTopups.reduce(
+          (min, t) => (t.date < min ? t.date : min),
+          deletedBankTopups[0].date,
+        )
+        await recalculateBankBalancesFrom(anchorDate, tx)
+      }
+
+      return toDelete
+    })
 
     const totalDeleted = topupsToDelete.reduce((sum, t) => sum + Number(t.amount), 0)
 
@@ -631,12 +591,9 @@ export async function DELETE(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json({ success: true })
+    return successOk()
   } catch (error) {
     logError("Error deleting wallet top-up", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to delete wallet top-up" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to delete wallet top-up")
   }
 }

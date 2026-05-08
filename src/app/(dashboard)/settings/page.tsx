@@ -19,8 +19,8 @@ import {
   DataManagementSection,
   CashFloatSettingsSection,
   ShiftSettingsSection,
-  AuditLogSection,
   WholesaleTiersSection,
+  BusinessRulesSection,
 } from '@/components/settings'
 
 export default function SettingsPage() {
@@ -180,7 +180,14 @@ export default function SettingsPage() {
                 </CardTitle>
                 <CardDescription>Manage user accounts and permissions</CardDescription>
               </div>
-              <AddUserButton onClick={() => setShowAddDialog(true)} />
+              <AddUserButton
+                onClick={() => {
+                  // Form state is shared between add + edit dialogs; clear any
+                  // leftover values from a previous edit before opening Add.
+                  setFormData(initialFormData)
+                  setShowAddDialog(true)
+                }}
+              />
             </CardHeader>
             <CardContent>
               <UserTable
@@ -210,7 +217,13 @@ export default function SettingsPage() {
         <UserFormDialog
           mode="edit"
           open={showEditDialog}
-          onOpenChange={setShowEditDialog}
+          onOpenChange={(open) => {
+            setShowEditDialog(open)
+            if (!open) {
+              setEditingUser(null)
+              setFormData(initialFormData)
+            }
+          }}
           formData={formData}
           onFormChange={handleFormChange}
           onSubmit={handleEditUser}
@@ -224,14 +237,14 @@ export default function SettingsPage() {
         {/* Wholesale Discount Tiers (Owner Only) */}
         {isOwner && <WholesaleTiersSection isOwner={isOwner} />}
 
+        {/* Business Rules — owner-tunable thresholds (Owner Only) */}
+        {isOwner && <BusinessRulesSection isOwner={isOwner} />}
+
         {/* Shift Settings (Owner Only) */}
         {isOwner && <ShiftSettingsSection isOwner={isOwner} />}
 
-        {/* Audit Log (Owner Only) */}
-        {isOwner && <AuditLogSection />}
-
         {/* Data Management */}
-        <DataManagementSection isOwner={isOwner} />
+        <DataManagementSection />
 
         {/* Application Info */}
         <Card>
@@ -249,7 +262,7 @@ export default function SettingsPage() {
             <Separator />
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Version</span>
-              <Badge variant="secondary">v0.8-beta</Badge>
+              <Badge variant="secondary">v0.9-beta</Badge>
             </div>
             <Separator />
             <div className="flex items-center justify-between">

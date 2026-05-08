@@ -6,9 +6,11 @@ import { successResponse, ApiErrors } from "@/lib/api-response"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
 import { logError } from "@/lib/logger"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { updateDiscountTiersSchema, validateRequestBody } from "@/lib/validations"
+import { WHOLESALE_BASE_MIN_CASH } from "@/lib/constants"
 
 const DEFAULT_TIERS = [
-  { discountPercent: 6.0, minCashAmount: 500, sortOrder: 1, isActive: true },
+  { discountPercent: 6.0, minCashAmount: WHOLESALE_BASE_MIN_CASH, sortOrder: 1, isActive: true },
   { discountPercent: 6.5, minCashAmount: 1000, sortOrder: 2, isActive: false },
   { discountPercent: 7.0, minCashAmount: 2000, sortOrder: 3, isActive: false },
   { discountPercent: 7.5, minCashAmount: 3000, sortOrder: 4, isActive: false },
@@ -48,14 +50,9 @@ export async function PATCH(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const body = await request.json()
-    const { tiers } = body as {
-      tiers: Array<{ id: string; minCashAmount: number; isActive: boolean }>
-    }
-
-    if (!Array.isArray(tiers) || tiers.length === 0) {
-      return ApiErrors.badRequest("Tiers array is required")
-    }
+    const validation = await validateRequestBody(request, updateDiscountTiersSchema)
+    if ("error" in validation) return validation.error
+    const { tiers } = validation.data
 
     // Validate
     const activeTiers = tiers.filter((t) => t.isActive)
@@ -75,15 +72,15 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    // The 6% tier min amount is fixed at 500
+    // The 6% tier min amount is fixed at the base floor
     if (tier1) {
       const tier1Update = tiers.find((t) => t.id === tier1.id)
-      if (tier1Update && tier1Update.minCashAmount !== 500) {
-        return ApiErrors.badRequest("The 6% tier minimum cash amount must be 500")
+      if (tier1Update && tier1Update.minCashAmount !== WHOLESALE_BASE_MIN_CASH) {
+        return ApiErrors.badRequest(`The 6% tier minimum cash amount must be ${WHOLESALE_BASE_MIN_CASH}`)
       }
     }
 
-    // Validate min cash amounts are >= 500 and ascending for active tiers
+    // Validate min cash amounts are >= the base floor and ascending for active tiers
     const sortedActive = tiers
       .map((t) => {
         const existing = existingTiers.find((e) => e.id === t.id)
@@ -93,8 +90,8 @@ export async function PATCH(request: NextRequest) {
       .sort((a, b) => a.sortOrder - b.sortOrder)
 
     for (let i = 0; i < sortedActive.length; i++) {
-      if (sortedActive[i].minCashAmount < 500) {
-        return ApiErrors.badRequest("Minimum cash amount must be at least 500")
+      if (sortedActive[i].minCashAmount < WHOLESALE_BASE_MIN_CASH) {
+        return ApiErrors.badRequest(`Minimum cash amount must be at least ${WHOLESALE_BASE_MIN_CASH}`)
       }
       if (i > 0 && sortedActive[i].minCashAmount <= sortedActive[i - 1].minCashAmount) {
         return ApiErrors.badRequest("Min cash amounts must be ascending for active tiers")

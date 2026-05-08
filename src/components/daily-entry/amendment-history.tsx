@@ -24,12 +24,12 @@ interface AmendmentDiff {
   after: string | number
 }
 
-function parseSnapshot(json: string): Record<string, unknown> {
-  try {
-    return JSON.parse(json)
-  } catch {
-    return {}
-  }
+// Snapshots are now `jsonb` columns — Prisma returns them as parsed objects.
+// This guard normalises legacy/null/edge cases to a plain record.
+function asSnapshot(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
 }
 
 function buildDiff(before: Record<string, unknown>, after: Record<string, unknown>): AmendmentDiff[] {
@@ -117,8 +117,8 @@ interface DiffDialogProps {
 }
 
 function DiffDialog({ amendment, index, open, onClose }: DiffDialogProps) {
-  const before = parseSnapshot(amendment.snapshotBefore)
-  const after = amendment.snapshotAfter ? parseSnapshot(amendment.snapshotAfter) : null
+  const before = asSnapshot(amendment.snapshotBefore)
+  const after = amendment.snapshotAfter ? asSnapshot(amendment.snapshotAfter) : null
   const diffs = after ? buildDiff(before, after) : []
 
   return (
@@ -195,7 +195,7 @@ export function AmendmentHistory({ amendments }: AmendmentHistoryProps) {
                 <span className="text-sm font-medium">
                   Amendment #{index + 1}
                 </span>
-                {amendment.snapshotAfter && (
+                {amendment.snapshotAfter != null && (
                   <Button
                     variant="outline"
                     size="sm"

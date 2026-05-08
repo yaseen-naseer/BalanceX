@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/db"
 import { z } from "zod"
 import { validateRequestBody } from "@/lib/validations"
-import { ApiErrors } from "@/lib/api-response"
+import { ApiErrors, successResponse } from "@/lib/api-response"
 import { logError } from "@/lib/logger"
 import { createAuditLog } from "@/lib/audit"
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       details: { verified, notes },
     })
 
-    return NextResponse.json({ success: true, data: screenshot })
+    return successResponse(screenshot)
   } catch (error) {
     logError("Error verifying screenshot", error)
     return ApiErrors.serverError("Failed to verify screenshot")

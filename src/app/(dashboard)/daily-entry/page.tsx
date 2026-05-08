@@ -33,6 +33,7 @@ import {
 import { useAuth } from '@/hooks/use-auth'
 import { useWholesaleCustomers } from '@/hooks/use-wholesale-customers'
 import { canReopenDailyEntry } from '@/lib/permissions'
+import { useBusinessRules } from '@/hooks/use-business-rules'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { useDailyEntryForm, type ValidationMessage } from '@/hooks/use-daily-entry-form'
@@ -70,7 +71,6 @@ export default function DailyEntryPage() {
   // On mount: check if yesterday has an unsubmitted entry — if so, stay on yesterday
   useEffect(() => {
     if (initialDateResolved) return
-    const today = format(new Date(), 'yyyy-MM-dd')
     const yesterday = new Date()
     yesterday.setDate(yesterday.getDate() - 1)
     const yesterdayStr = format(yesterday, 'yyyy-MM-dd')
@@ -105,12 +105,16 @@ export default function DailyEntryPage() {
     guard(() => setCurrentDate(date))
   }
 
+  const { rules: businessRules } = useBusinessRules()
+
   // Check if current user can reopen (blocked if screenshot is verified)
   const canReopen = useMemo(() => {
     if (!user?.role) return false
     if (form.entry?.screenshot?.isVerified) return false
-    return canReopenDailyEntry(user.role, new Date(currentDate))
-  }, [user, currentDate, form.entry?.screenshot?.isVerified])
+    return canReopenDailyEntry(user.role, new Date(currentDate), {
+      accountantEditWindowDays: businessRules.accountantEditWindowDays,
+    })
+  }, [user, currentDate, form.entry?.screenshot?.isVerified, businessRules.accountantEditWindowDays])
 
   // Get subtitle based on state
   const subtitle = useMemo(() => {
@@ -222,11 +226,16 @@ export default function DailyEntryPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={systemStartDate ? new Date().getTime() - systemStartDate.getTime() < 86400000 : false}
+                // Fail-closed: until `systemStartDate` resolves (and after, when
+                // the floor is too recent), the Yesterday button is disabled.
+                // The earlier `systemStartDate ? ... : false` allowed the button
+                // to be clickable during the fetch, opening a race window.
+                disabled={!systemStartDate || new Date().getTime() - systemStartDate.getTime() < 86400000}
                 onClick={() => {
+                  if (!systemStartDate) return
                   const yesterday = new Date()
                   yesterday.setDate(yesterday.getDate() - 1)
-                  if (systemStartDate && yesterday < systemStartDate) return
+                  if (yesterday < systemStartDate) return
                   handleDateChange(format(yesterday, 'yyyy-MM-dd'))
                 }}
               >
@@ -256,7 +265,10 @@ export default function DailyEntryPage() {
                   mode="single"
                   selected={new Date(currentDate)}
                   onSelect={(date) => date && handleDateChange(format(date, 'yyyy-MM-dd'))}
-                  disabled={{ after: new Date(), ...(systemStartDate && { before: systemStartDate }) }}
+                  // Fail-closed: when `systemStartDate` is null (fetch in flight),
+                  // `before` defaults to today — disabling all past dates until
+                  // the actual floor resolves.
+                  disabled={{ after: new Date(), before: systemStartDate ?? new Date() }}
                   initialFocus
                 />
               </PopoverContent>
@@ -325,7 +337,6 @@ export default function DailyEntryPage() {
               localData={form.localData}
               totals={form.totals}
               isReadOnly={form.isReadOnly}
-              onValueChange={form.handleValueChange}
               onQuantityChange={form.handleQuantityChange}
               getCategoryTotal={form.getCategoryTotal}
               dailyEntryId={form.entry?.id ?? null}

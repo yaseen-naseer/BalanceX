@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs"
 import { BCRYPT_ROUNDS } from "@/lib/constants"
 import { z } from "zod"
 import { createAuditLog } from "@/lib/audit"
-import { ApiErrors } from "@/lib/api-response"
+import { ApiErrors, successOk } from "@/lib/api-response"
 import { logError } from "@/lib/logger"
 
 // GET /api/setup — check whether setup is still needed (public)
@@ -22,12 +22,15 @@ const setupSchema = z.object({
       .min(3, "Username must be at least 3 characters")
       .max(30)
       .regex(/^[a-zA-Z0-9_]+$/, "Letters, numbers and underscores only"),
+    // Setup is the bootstrap OWNER account — stricter than the regular user-creation policy.
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
+      .min(12, "Password must be at least 12 characters")
+      .max(100, "Password too long")
       .refine((p) => /[a-z]/.test(p), "Must contain a lowercase letter")
       .refine((p) => /[A-Z]/.test(p), "Must contain an uppercase letter")
-      .refine((p) => /[0-9]/.test(p), "Must contain a number"),
+      .refine((p) => /[0-9]/.test(p), "Must contain a number")
+      .refine((p) => /[!@#$%^&*]/.test(p), "Must contain a special character (!@#$%^&*)"),
   }),
   bank: z.object({
     openingBalance: z.number().min(0),
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest) {
       details: { username: user.username, name: user.name, role: "OWNER", setupWizard: true },
     })
 
-    return NextResponse.json({ success: true })
+    return successOk()
   } catch (error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return ApiErrors.conflict("Username already taken")

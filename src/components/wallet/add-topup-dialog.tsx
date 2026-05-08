@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,19 +15,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Plus, CalendarIcon, Trash2, SplitSquareHorizontal } from 'lucide-react'
+import { Plus, CalendarIcon, SplitSquareHorizontal } from 'lucide-react'
 import { format } from 'date-fns'
 import { useWallet } from '@/hooks/use-wallet'
+import { useBankBalance } from '@/hooks/use-bank-balance'
 import { toast } from 'sonner'
 import { TOPUP_FACTOR, DEALER_DISCOUNT_RATE, GST_RATE, fmtCurrency } from '@/lib/constants'
 import { useSystemStartDate } from '@/hooks/use-system-date'
-
-type PaymentMethod = 'Cash' | 'Cheque' | 'Transfer'
-
-interface PaymentSplit {
-  method: PaymentMethod
-  amount: string
-}
+import {
+  useSplitPayment,
+  paymentMethodToWalletSource,
+  PAYMENT_METHOD_LABEL,
+  type PaymentMethod,
+} from '@/hooks/use-split-payment'
+import { SplitPaymentInput, PaymentMethodButtons } from '@/components/shared'
+import { randomUUID } from '@/lib/utils/uuid'
+import { useDialogState } from '@/hooks/use-dialog-state'
 
 export interface AddTopupDialogProps {
   onAdd: () => void
@@ -35,33 +38,18 @@ export interface AddTopupDialogProps {
 }
 
 export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
-  const [open, setOpen] = useState(false)
+  const dialog = useDialogState()
   const [date, setDate] = useState(() => defaultDate ? new Date(defaultDate + 'T12:00:00') : new Date())
   const [amount, setAmount] = useState('')
-  const [isSplit, setIsSplit] = useState(false)
-  const [splits, setSplits] = useState<PaymentSplit[]>([
-    { method: 'Cash', amount: '' },
-  ])
   const [splitReference, setSplitReference] = useState('')
-  const [singleMethod, setSingleMethod] = useState<PaymentMethod>('Cash')
+  const [singleMethod, setSingleMethod] = useState<PaymentMethod>('CASH')
   const [singleReference, setSingleReference] = useState('')
   const [notes, setNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { addTopup } = useWallet()
   const systemStartDate = useSystemStartDate()
-  const [bankBalance, setBankBalance] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    fetch('/api/bank')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.data?.currentBalance != null) {
-          setBankBalance(data.data.currentBalance)
-        }
-      })
-      .catch(() => {})
-  }, [open])
+  const bankBalance = useBankBalance(dialog.isOpen)
+  const split = useSplitPayment({ defaultMethod: 'CASH' })
 
   const numAmount = parseFloat(amount) || 0
 
@@ -75,43 +63,22 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
   }, [numAmount])
 
   // Split payment totals
-  const splitTotal = splits.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0)
-  const splitRemaining = Math.round((numAmount - splitTotal) * 100) / 100
+  const splitRemaining = Math.round((numAmount - split.splitTotal) * 100) / 100
 
-  // Bank amount from splits (non-cash)
-  const bankAmountFromSplits = splits
-    .filter((s) => s.method !== 'Cash')
+  // Bank amount from splits (non-cash) and single-mode bank amount, used for the
+  // "exceeds bank balance" warning.
+  const bankAmountFromSplits = split.splits
+    .filter((s) => s.method !== 'CASH')
     .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0)
-
-  // Bank amount for single mode
-  const singleBankAmount = singleMethod !== 'Cash' ? numAmount : 0
+  const singleBankAmount = singleMethod !== 'CASH' ? numAmount : 0
 
   const reset = () => {
     setAmount('')
-    setIsSplit(false)
-    setSplits([{ method: 'Cash', amount: '' }])
     setSplitReference('')
-    setSingleMethod('Cash')
+    setSingleMethod('CASH')
     setSingleReference('')
     setNotes('')
-  }
-
-  const usedMethods = splits.map((s) => s.method)
-
-  const addSplit = () => {
-    if (splits.length >= 3) return
-    const available = (['Cash', 'Cheque', 'Transfer'] as const).find((m) => !usedMethods.includes(m))
-    if (!available) return
-    setSplits([...splits, { method: available, amount: '' }])
-  }
-
-  const removeSplit = (index: number) => {
-    if (splits.length <= 1) return
-    setSplits(splits.filter((_, i) => i !== index))
-  }
-
-  const updateSplit = (index: number, field: keyof PaymentSplit, value: string) => {
-    setSplits(splits.map((s, i) => i === index ? { ...s, [field]: value } : s))
+    split.reset()
   }
 
   const handleSubmit = async () => {
@@ -120,9 +87,8 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
       return
     }
 
-    if (isSplit) {
-      // Validate splits
-      if (splits.some((s) => !parseFloat(s.amount) || parseFloat(s.amount) <= 0)) {
+    if (split.isSplit) {
+      if (split.splits.some((s) => !parseFloat(s.amount) || parseFloat(s.amount) <= 0)) {
         toast.error('All split amounts must be greater than 0')
         return
       }
@@ -133,35 +99,34 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
 
       setIsSubmitting(true)
       try {
-        // Create one top-up per split, each with proportional reload value
-        const groupId = crypto.randomUUID()
+        // Create one top-up per split, each with a proportional reload value.
+        const groupId = randomUUID()
         const refPart = splitReference.trim() ? ` (Ref: ${splitReference.trim()})` : ''
-        for (const split of splits) {
-          const splitPaid = parseFloat(split.amount)
+        for (const s of split.splits) {
+          const splitPaid = parseFloat(s.amount)
           const splitReload = Math.round((splitPaid / TOPUP_FACTOR) * 100) / 100
-          const source = split.method === 'Cash' ? 'CASH' as const : 'BANK' as const
-          const methodNote = `${split.method} payment${refPart} (split ${splits.length}-way)`
+          const methodNote = `${PAYMENT_METHOD_LABEL[s.method]} payment${refPart} (split ${split.splits.length}-way)`
           const fullNotes = notes ? `${methodNote} — ${notes}` : methodNote
 
           const result = await addTopup({
             date: format(date, 'yyyy-MM-dd'),
             amount: splitReload,
             paidAmount: splitPaid,
-            source,
+            source: paymentMethodToWalletSource(s.method),
             notes: fullNotes,
             splitGroupId: groupId,
           })
 
           if (!result) {
-            toast.error(`Failed to add ${split.method} split`)
+            toast.error(`Failed to add ${PAYMENT_METHOD_LABEL[s.method]} split`)
             setIsSubmitting(false)
             return
           }
         }
 
-        toast.success(`Top-up added: ${fmtCurrency(breakdown.reloadValue)} MVR reload (paid ${fmtCurrency(numAmount)} MVR, split ${splits.length} ways)`)
+        toast.success(`Top-up added: ${fmtCurrency(breakdown.reloadValue)} MVR reload (paid ${fmtCurrency(numAmount)} MVR, split ${split.splits.length} ways)`)
         reset()
-        setOpen(false)
+        dialog.close()
         onAdd()
       } finally {
         setIsSubmitting(false)
@@ -170,25 +135,24 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
       // Single payment
       setIsSubmitting(true)
       try {
-        const source = singleMethod === 'Cash' ? 'CASH' as const : 'BANK' as const
         const refPart = singleReference.trim()
-          ? ` (${singleMethod === 'Cheque' ? 'CHQ' : 'REF'}: ${singleReference.trim()})`
+          ? ` (${singleMethod === 'CHEQUE' ? 'CHQ' : 'REF'}: ${singleReference.trim()})`
           : ''
-        const methodNote = `${singleMethod} payment${refPart}`
+        const methodNote = `${PAYMENT_METHOD_LABEL[singleMethod]} payment${refPart}`
         const fullNotes = notes ? `${methodNote} — ${notes}` : methodNote
 
         const result = await addTopup({
           date: format(date, 'yyyy-MM-dd'),
           amount: breakdown.reloadValue,
           paidAmount: numAmount,
-          source,
+          source: paymentMethodToWalletSource(singleMethod),
           notes: fullNotes,
         })
 
         if (result) {
-          toast.success(`Top-up added: ${fmtCurrency(breakdown.reloadValue)} MVR reload (paid ${fmtCurrency(numAmount)} MVR via ${singleMethod})`)
+          toast.success(`Top-up added: ${fmtCurrency(breakdown.reloadValue)} MVR reload (paid ${fmtCurrency(numAmount)} MVR via ${PAYMENT_METHOD_LABEL[singleMethod]})`)
           reset()
-          setOpen(false)
+          dialog.close()
           onAdd()
         }
       } finally {
@@ -197,8 +161,19 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
     }
   }
 
+  const splitFooter = numAmount > 0 ? (
+    <div className={`text-xs text-center font-medium ${Math.abs(splitRemaining) <= 0.01 ? 'text-emerald-600' : 'text-amber-600'}`}>
+      {Math.abs(splitRemaining) <= 0.01
+        ? 'Splits match total'
+        : `Remaining: ${fmtCurrency(splitRemaining)} MVR`}
+    </div>
+  ) : null
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
+    <Dialog
+      open={dialog.isOpen}
+      onOpenChange={(v) => { dialog.onOpenChange(v); if (!v) reset() }}
+    >
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
@@ -226,7 +201,9 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
                   mode="single"
                   selected={date}
                   onSelect={(d) => d && setDate(d)}
-                  disabled={{ after: new Date(), ...(systemStartDate && { before: systemStartDate }) }}
+                  // Fail-closed: when `systemStartDate` is null (fetch in flight),
+                  // `before` defaults to today so all past dates stay disabled.
+                  disabled={{ after: new Date(), before: systemStartDate ?? new Date() }}
                   initialFocus
                 />
               </PopoverContent>
@@ -273,11 +250,11 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
           )}
 
           {/* Bank balance warning */}
-          {bankBalance != null && (isSplit ? bankAmountFromSplits : singleBankAmount) > bankBalance && (
+          {bankBalance != null && (split.isSplit ? bankAmountFromSplits : singleBankAmount) > bankBalance && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
               <span className="shrink-0">&#9888;</span>
               <span>
-                Bank portion ({fmtCurrency(isSplit ? bankAmountFromSplits : singleBankAmount)} MVR) exceeds current bank balance ({fmtCurrency(bankBalance)} MVR).
+                Bank portion ({fmtCurrency(split.isSplit ? bankAmountFromSplits : singleBankAmount)} MVR) exceeds current bank balance ({fmtCurrency(bankBalance)} MVR).
               </span>
             </div>
           )}
@@ -289,14 +266,14 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
               {numAmount > 0 && (
                 <Button
                   type="button"
-                  variant={isSplit ? 'default' : 'ghost'}
+                  variant={split.isSplit ? 'default' : 'ghost'}
                   size="sm"
                   className="h-7 text-xs gap-1"
                   onClick={() => {
-                    setIsSplit(!isSplit)
-                    if (!isSplit) {
-                      setSplits([{ method: 'Cash', amount: '' }])
-    setSplitReference('')
+                    split.toggle()
+                    if (!split.isSplit) {
+                      // entering split mode — clear single-mode reference
+                      setSplitReference('')
                     }
                   }}
                 >
@@ -306,98 +283,34 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
               )}
             </div>
 
-            {isSplit ? (
-              <div className="space-y-3">
-                {splits.map((split, index) => (
-                  <div key={index} className="rounded-lg border p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Split {index + 1}</span>
-                      {splits.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeSplit(index)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      {(['Cash', 'Cheque', 'Transfer'] as const).map((m) => {
-                        const usedByOther = splits.some((s, i) => i !== index && s.method === m)
-                        return (
-                          <Button
-                            key={m}
-                            type="button"
-                            variant={split.method === m ? 'default' : 'outline'}
-                            onClick={() => updateSplit(index, 'method', m)}
-                            className="flex-1"
-                            size="sm"
-                            disabled={usedByOther}
-                          >
-                            {m}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={split.amount}
-                      onChange={(e) => updateSplit(index, 'amount', e.target.value)}
-                      placeholder="Amount"
-                      className="font-mono"
-                    />
-                  </div>
-                ))}
-                {splits.length < 3 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={addSplit}
-                  >
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    Add Split
-                  </Button>
-                )}
+            {split.isSplit ? (
+              <>
+                <SplitPaymentInput
+                  splits={split.splits}
+                  onAdd={split.addSplit}
+                  onRemove={split.removeSplit}
+                  onUpdate={split.updateSplit}
+                  maxSplits={split.maxSplits}
+                  footer={splitFooter}
+                />
                 <Input
                   value={splitReference}
                   onChange={(e) => setSplitReference(e.target.value)}
                   placeholder="Reference number (shared across all splits)"
                 />
-                {numAmount > 0 && (
-                  <div className={`text-xs text-center font-medium ${Math.abs(splitRemaining) <= 0.01 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {Math.abs(splitRemaining) <= 0.01
-                      ? 'Splits match total'
-                      : `Remaining: ${fmtCurrency(splitRemaining)} MVR`}
-                  </div>
-                )}
-              </div>
+              </>
             ) : (
               <>
-                <div className="flex gap-2">
-                  {(['Cash', 'Cheque', 'Transfer'] as const).map((m) => (
-                    <Button
-                      key={m}
-                      type="button"
-                      variant={singleMethod === m ? 'default' : 'outline'}
-                      onClick={() => setSingleMethod(m)}
-                      className="flex-1"
-                      size="sm"
-                    >
-                      {m}
-                    </Button>
-                  ))}
-                </div>
-                {singleMethod !== 'Cash' && (
+                <PaymentMethodButtons
+                  value={singleMethod}
+                  onChange={setSingleMethod}
+                  size="sm"
+                />
+                {singleMethod !== 'CASH' && (
                   <Input
                     value={singleReference}
                     onChange={(e) => setSingleReference(e.target.value)}
-                    placeholder={singleMethod === 'Cheque' ? 'Cheque number' : 'Transfer reference'}
+                    placeholder={singleMethod === 'CHEQUE' ? 'Cheque number' : 'Transfer reference'}
                   />
                 )}
               </>
@@ -416,12 +329,12 @@ export function AddTopupDialog({ onAdd, defaultDate }: AddTopupDialogProps) {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => { reset(); setOpen(false) }}>
+          <Button variant="outline" onClick={() => { reset(); dialog.close() }}>
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!breakdown || isSubmitting || (isSplit && Math.abs(splitRemaining) > 0.01)}
+            disabled={!breakdown || isSubmitting || (split.isSplit && Math.abs(splitRemaining) > 0.01)}
           >
             {isSubmitting ? 'Adding...' : 'Add Top-up'}
           </Button>

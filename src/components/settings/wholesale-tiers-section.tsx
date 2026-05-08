@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useApiClient } from "@/hooks/use-api-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Store, Save } from "lucide-react"
@@ -25,11 +24,7 @@ export function WholesaleTiersSection({ isOwner }: WholesaleTiersSectionProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
 
-  useEffect(() => {
-    fetchTiers()
-  }, [])
-
-  const fetchTiers = async () => {
+  const fetchTiers = useCallback(async () => {
     try {
       const result = await api.get<WholesaleDiscountTierData[]>("/api/wholesale-discount-tiers")
       if (result.success && result.data) {
@@ -49,7 +44,11 @@ export function WholesaleTiersSection({ isOwner }: WholesaleTiersSectionProps) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [api])
+
+  useEffect(() => {
+    fetchTiers()
+  }, [fetchTiers])
 
   const handleValueChange = (id: string, value: string) => {
     if (value === "" || /^\d*\.?\d*$/.test(value)) {

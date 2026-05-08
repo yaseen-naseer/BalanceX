@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { requireRole } from "@/lib/api-auth"
 import { UserRole } from "@prisma/client"
@@ -10,6 +10,7 @@ import {
 import { z } from "zod"
 import { logError } from "@/lib/logger"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
+import { ApiErrors, successResponse, successOk } from "@/lib/api-response"
 
 // Schema for PATCH (includes id)
 const patchShiftSettingsSchema = z.object({
@@ -27,16 +28,10 @@ export async function GET() {
       orderBy: { sortOrder: "asc" },
     })
 
-    return NextResponse.json({
-      success: true,
-      data: shifts,
-    })
+    return successResponse(shifts)
   } catch (error) {
     logError("Error fetching shift settings", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch shift settings" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch shift settings")
   }
 }
 
@@ -76,19 +71,10 @@ export async function POST(request: NextRequest) {
 
     await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: shift.id, details: { setting: "shift_created", name }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: shift,
-      },
-      { status: 201 }
-    )
+    return successResponse(shift, 201)
   } catch (error) {
     logError("Error creating shift setting", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to create shift setting" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to create shift setting")
   }
 }
 
@@ -125,16 +111,10 @@ export async function PATCH(request: NextRequest) {
 
     await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: id, details: { setting: "shift_updated", name, isActive }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
 
-    return NextResponse.json({
-      success: true,
-      data: shift,
-    })
+    return successResponse(shift)
   } catch (error) {
     logError("Error updating shift setting", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to update shift setting" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to update shift setting")
   }
 }
 
@@ -148,10 +128,7 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id")
 
     if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Shift ID is required" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Shift ID is required")
     }
 
     await prisma.shiftSettings.update({
@@ -161,12 +138,9 @@ export async function DELETE(request: NextRequest) {
 
     await createAuditLog({ action: "SETTINGS_CHANGED", userId: auth.user!.id, targetId: id, details: { setting: "shift_deactivated" }, ipAddress: getClientIpFromRequest(request), userAgent: getUserAgentFromRequest(request) })
 
-    return NextResponse.json({ success: true })
+    return successOk()
   } catch (error) {
     logError("Error deactivating shift setting", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to deactivate shift setting" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to deactivate shift setting")
   }
 }

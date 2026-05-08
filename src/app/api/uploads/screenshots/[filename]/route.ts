@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { readFile } from "fs/promises"
 import { join, resolve } from "path"
 import { existsSync } from "fs"
+import { SCREENSHOTS_DIR } from "@/lib/storage"
 
 const MIME_TYPES: Record<string, string> = {
   jpg: "image/jpeg",
@@ -27,7 +28,7 @@ export async function GET(
     return new NextResponse("Invalid filename", { status: 400 })
   }
 
-  const uploadsDir = resolve(join(process.cwd(), "public", "uploads", "screenshots"))
+  const uploadsDir = resolve(SCREENSHOTS_DIR)
   const filepath = resolve(join(uploadsDir, filename))
 
   // Ensure resolved path is within uploads directory
@@ -46,7 +47,10 @@ export async function GET(
   return new NextResponse(buffer, {
     headers: {
       "Content-Type": contentType,
-      "Cache-Control": "private, max-age=86400",
+      // Sensitive content: never persist on disk, never use stale cache without revalidation.
+      // Forces every request through the auth check above.
+      "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+      "Pragma": "no-cache",
     },
   })
 }

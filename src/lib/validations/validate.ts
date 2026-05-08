@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { ApiErrors } from "@/lib/api-response"
+import { dateParamSchema } from "./schemas"
 
 /**
  * Validates request body against a Zod schema
@@ -71,31 +73,23 @@ export function validateQueryParams<T>(
 }
 
 /**
- * Validates a date string and returns a Date object or error response
+ * Validate a YYYY-MM-DD date string from a route or query param.
+ * Returns a Date pinned to UTC midnight, or an error response.
+ *
+ * Stricter than `new Date(dateStr)`: rejects malformed strings (e.g. "garbage",
+ * "2026-13-01", "") that would otherwise become `Invalid Date` and crash Prisma.
  */
 export function validateDate(
   dateStr: string | null,
   fieldName = "date"
 ): { date: Date } | { error: NextResponse } {
-  if (!dateStr) {
-    return {
-      error: NextResponse.json(
-        { success: false, error: `${fieldName} is required` },
-        { status: 400 }
-      ),
-    }
+  const result = dateParamSchema.safeParse(dateStr)
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? `Invalid ${fieldName} format`
+    return { error: ApiErrors.badRequest(message) }
   }
-
-  const date = new Date(dateStr)
-  if (isNaN(date.getTime())) {
-    return {
-      error: NextResponse.json(
-        { success: false, error: `Invalid ${fieldName} format` },
-        { status: 400 }
-      ),
-    }
-  }
-
+  const date = new Date(result.data)
+  date.setUTCHours(0, 0, 0, 0)
   return { date }
 }
 

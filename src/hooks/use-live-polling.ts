@@ -32,10 +32,15 @@ export function useLivePolling({
   const [isLive, setIsLive] = useState(false)
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
   const lastSnapshotRef = useRef<string | null>(null)
+  // Mirror the latest callbacks into refs (post-commit) so `poll()` (which fires
+  // from a setInterval started in another effect) always reads the freshest
+  // versions without `poll` itself depending on them.
   const onUpdateRef = useRef(onUpdate)
-  onUpdateRef.current = onUpdate
   const onDataRef = useRef(onData)
-  onDataRef.current = onData
+  useEffect(() => {
+    onUpdateRef.current = onUpdate
+    onDataRef.current = onData
+  })
 
   const poll = useCallback(async () => {
     if (!url) return
@@ -68,6 +73,11 @@ export function useLivePolling({
 
   useEffect(() => {
     if (!url || !enabled) {
+      // The React Compiler flags `setIsLive(false)` here as a "cascading renders"
+      // risk because it's a synchronous setState in an effect — but this branch
+      // only fires when polling is actually disabled, so it's idempotent and
+      // doesn't cascade. Behaviour-preserved.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLive(false)
       return
     }

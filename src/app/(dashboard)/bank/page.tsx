@@ -29,7 +29,6 @@ export default function BankLedgerPage() {
   const { isSales, isOwner, isLoading: authLoading } = useAuth()
   const {
     transactions,
-    settings,
     currentBalance,
     isLoading,
     error,
@@ -62,7 +61,6 @@ export default function BankLedgerPage() {
     )
   }
 
-  const openingBalance = settings?.openingBalance || 0
   const today = new Date()
 
   const monthOptions = Array.from({ length: 12 }, (_, i) => {

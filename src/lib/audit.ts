@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/db"
-import { AuditAction } from "@prisma/client"
+import { AuditAction, Prisma } from "@prisma/client"
 
 interface AuditLogData {
   action: AuditAction
   userId?: string | null
   targetId?: string | null
-  details?: Record<string, unknown>
+  details?: Prisma.InputJsonValue
   ipAddress?: string | null
   userAgent?: string | null
 }
@@ -29,7 +29,7 @@ export async function createAuditLog(data: AuditLogData, options?: AuditLogOptio
         action: data.action,
         userId: data.userId || null,
         targetId: data.targetId || null,
-        details: data.details ? JSON.stringify(data.details) : null,
+        details: data.details ?? Prisma.DbNull,
         ipAddress: data.ipAddress || null,
         userAgent: data.userAgent || null,
       },

@@ -12,9 +12,9 @@ export { PasswordChangeDialog } from './password-change-dialog'
 export type { PasswordChangeDialogProps } from './password-change-dialog'
 
 export { DataManagementSection } from './data-management-section'
-export type { DataManagementSectionProps } from './data-management-section'
 
 export { CashFloatSettingsSection } from './cash-float-settings-section'
 export { ShiftSettingsSection } from './shift-settings-section'
 export { AuditLogSection } from './audit-log-section'
 export { WholesaleTiersSection } from './wholesale-tiers-section'
+export { BusinessRulesSection } from './business-rules-section'

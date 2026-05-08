@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useApiClient } from '@/hooks/use-api-client'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useDialogState } from '@/hooks/use-dialog-state'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -29,7 +30,7 @@ export interface LedgerDialogProps {
 
 export function LedgerDialog({ customer, trigger }: LedgerDialogProps) {
   const api = useApiClient()
-  const [open, setOpen] = useState(false)
+  const dialog = useDialogState()
   const [isLoading, setIsLoading] = useState(false)
   const [customerData, setCustomerData] = useState<CustomerWithTransactions | null>(null)
 
@@ -47,15 +48,16 @@ export function LedgerDialog({ customer, trigger }: LedgerDialogProps) {
     }
   }
 
-  const handleOpenChange = (isOpen: boolean) => {
-    setOpen(isOpen)
-    if (isOpen) {
+  // Wraps useDialogState's onOpenChange to also fetch the ledger when opening.
+  const handleOpenChange = (next: boolean) => {
+    dialog.onOpenChange(next)
+    if (next) {
       fetchLedger()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={dialog.isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
@@ -168,7 +170,7 @@ export function LedgerDialog({ customer, trigger }: LedgerDialogProps) {
         ) : null}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={dialog.close}>
             Close
           </Button>
         </DialogFooter>

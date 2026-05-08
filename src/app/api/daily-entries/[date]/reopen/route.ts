@@ -1,8 +1,11 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { getAuthenticatedUser } from '@/lib/api-auth'
 import { canReopenDailyEntry } from '@/lib/permissions'
+import { getBusinessRules } from '@/lib/business-rules'
 import { successResponse, ApiErrors } from '@/lib/api-response'
+import { validateDate } from '@/lib/validations'
 import { fullEntryInclude } from '@/lib/calculations/daily-entry'
 import { convertPrismaDecimals } from '@/lib/utils/serialize'
 import { logError } from '@/lib/logger'
@@ -17,11 +20,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (auth.error) return auth.error
 
   const { date } = await params
-  const entryDate = new Date(date)
-  entryDate.setUTCHours(0, 0, 0, 0)
+  const dateValidation = validateDate(date)
+  if ("error" in dateValidation) return dateValidation.error
+  const entryDate = dateValidation.date
 
-  // Check reopen permission
-  if (!canReopenDailyEntry(auth.user!.role, entryDate)) {
+  // Check reopen permission (uses owner-tunable accountant window).
+  const rules = await getBusinessRules()
+  if (!canReopenDailyEntry(auth.user!.role, entryDate, {
+    accountantEditWindowDays: rules.accountantEditWindowDays,
+  })) {
     return ApiErrors.forbidden('You do not have permission to reopen this entry')
   }
 
@@ -64,7 +71,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Capture snapshot before reopening
-    const snapshotBefore = JSON.stringify(convertPrismaDecimals(entry))
+    const snapshotBefore = convertPrismaDecimals(entry) as Prisma.InputJsonValue
 
     // Create amendment record and update entry in a transaction
     await prisma.$transaction([
@@ -89,7 +96,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           action: 'DAILY_ENTRY_REOPENED',
           userId: auth.user!.id,
           targetId: entry.id,
-          details: JSON.stringify({ reason, date }),
+          details: { reason, date },
         },
       }),
     ])

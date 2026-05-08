@@ -115,7 +115,7 @@ export function CurrencyInput({
       }, 0)
       return () => clearTimeout(timeoutId)
     }
-  }, [value, isFocused])
+  }, [value, isFocused, decimals])
 
   // Parse and validate the input value
   const parseValue = useCallback(
@@ -225,7 +225,7 @@ export function CurrencyInput({
     }
 
     onBlur?.()
-  }, [localValue, parseValue, onChange, formatOnBlur, onBlur])
+  }, [localValue, parseValue, onChange, formatOnBlur, onBlur, decimals])
 
   // Handle focus
   const handleFocus = useCallback(

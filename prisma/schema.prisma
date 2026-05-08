@@ -261,6 +261,11 @@ model CreditTransaction {
   // Running balance at time of transaction
   balanceAfter Decimal @db.Decimal(12, 2)
 
+  // For TRANSFER/CHEQUE settlements, FK to the auto-created bank deposit (S1).
+  // SetNull so admin-driven bank tx delete doesn't cascade-delete the settlement record.
+  bankTransactionId String?          @unique
+  bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: SetNull)
+
   // Relations
   customer   CreditCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   user       User           @relation(fields: [createdBy], references: [id], onDelete: Restrict)
@@ -296,8 +301,13 @@ model BankTransaction {
   // Set when this transaction was auto-created from a daily entry (YYYY-MM-DD)
   dailyEntryDate String?
 
-  // Relation
-  user User @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  // Relations
+  user             User               @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  // Reverse 1:1 relations — populated when this bank tx was auto-created from
+  // a wallet top-up, a credit settlement, or a transfer-sale line item.
+  walletTopup      WalletTopup?
+  creditSettlement CreditTransaction?
+  saleLineItem     SaleLineItem?
 
   @@index([dailyEntryDate])
   @@index([date])
@@ -335,6 +345,11 @@ model WalletTopup {
   splitGroupId String?           // Shared ID for split payments (null = single payment)
   createdBy    String
   createdAt    DateTime          @default(now())
+
+  // For BANK-source top-ups, FK to the auto-created bank withdrawal (S1).
+  // SetNull so admin-driven bank tx delete doesn't cascade-delete the wallet record.
+  bankTransactionId String?          @unique
+  bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: SetNull)
 
   // Relation
   user User @relation(fields: [createdBy], references: [id], onDelete: Restrict)
@@ -462,7 +477,7 @@ model AuditLog {
   action    AuditAction
   userId    String?     // User who performed the action (null for system actions)
   targetId  String?     // ID of affected resource (customer, user, etc.)
-  details   String?     @db.Text // JSON string with additional context
+  details   Json?       // structured action context (jsonb)
   ipAddress String?
   userAgent String?
   createdAt DateTime    @default(now())
@@ -546,8 +561,8 @@ model DailyEntryAmendment {
   resubmittedBy  String?
   resubmittedByUser User? @relation("AmendmentResubmitter", fields: [resubmittedBy], references: [id], onDelete: Restrict)
   resubmittedAt  DateTime?
-  snapshotBefore String   @db.Text
-  snapshotAfter  String?  @db.Text
+  snapshotBefore Json     // structured entry snapshot at reopen time (jsonb)
+  snapshotAfter  Json?    // structured entry snapshot at resubmission time (jsonb, nullable while open)
 
   @@index([dailyEntryId])
   @@map("daily_entry_amendments")
@@ -590,6 +605,11 @@ model SaleLineItem {
   cashAmount          Decimal?  @db.Decimal(12, 2)  // What retailer paid/owes (wholesale only)
   discountPercent     Decimal?  @db.Decimal(4, 2)   // Discount % applied (wholesale only)
 
+  // For TRANSFER-method line items, FK to the auto-created bank deposit (S1.b).
+  // SetNull so an admin-driven bank tx delete doesn't cascade-delete the line item.
+  bankTransactionId   String?           @unique
+  bankTransaction     BankTransaction?  @relation(fields: [bankTransactionId], references: [id], onDelete: SetNull)
+
   // Relations
   dailyEntry         DailyEntry          @relation(fields: [dailyEntryId], references: [id], onDelete: Cascade)
   user               User                @relation(fields: [createdBy], references: [id], onDelete: Restrict)
@@ -626,6 +646,28 @@ model WholesaleCustomer {
 // ============================================
 // WHOLESALE DISCOUNT TIERS - Global settings
 // ============================================
+// ============================================
+// BUSINESS RULES SETTINGS - Owner-tunable thresholds
+// ============================================
+// Single-row table (id="default"). Owns runtime-tunable thresholds that were
+// previously hardcoded in `lib/permissions.ts` and `lib/calculations/dashboard.ts`.
+// Server reads via `lib/business-rules.ts:getBusinessRules()`; client reads via
+// `hooks/use-business-rules.ts`. PATCH endpoint is OWNER-only.
+model BusinessRulesSettings {
+  id                       String   @id @default("default")
+  // How many days back an ACCOUNTANT can edit / reopen a daily entry.
+  // OWNER is unrestricted; SALES is restricted to today.
+  accountantEditWindowDays Int      @default(7)
+  // A credit customer with positive outstanding balance and last activity older
+  // than this is flagged on the dashboard alerts panel.
+  overdueCreditDays        Int      @default(30)
+  updatedBy                String?
+  updatedAt                DateTime @updatedAt
+  createdAt                DateTime @default(now())
+
+  @@map("business_rules_settings")
+}
+
 model WholesaleDiscountTier {
   id              String   @id @default(cuid())
   discountPercent Decimal  @db.Decimal(4, 2)  // Fixed: 6.0, 6.5, 7.0, 7.5, 8.0

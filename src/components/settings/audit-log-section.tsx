@@ -88,10 +88,42 @@ interface AuditLogRow {
   createdAt: string
 }
 
-function renderDetails(details: unknown): string {
+function fmtMoney(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—"
+  const n = Number(v)
+  if (isNaN(n)) return String(v)
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function renderDetails(action: string, details: unknown): string {
   if (!details || (typeof details === "object" && Object.keys(details as object).length === 0)) {
     return "—"
   }
+
+  // Pretty rendering for opening-balance corrections
+  if (action === "SETTINGS_CHANGED" && typeof details === "object") {
+    const d = details as Record<string, unknown>
+    const scope = String(d.scope ?? d.setting ?? "")
+    const label =
+      scope === "wallet_opening_balance"
+        ? "Wallet opening"
+        : scope || "Setting"
+    const oldVal = "oldOpeningBalance" in d ? fmtMoney(d.oldOpeningBalance) : null
+    const newVal = "newOpeningBalance" in d ? fmtMoney(d.newOpeningBalance) : fmtMoney(d.openingBalance)
+    const reason = d.reason ? String(d.reason) : null
+
+    const lines: string[] = []
+    if (oldVal !== null) {
+      lines.push(`${label}: ${oldVal} → ${newVal} MVR`)
+    } else {
+      lines.push(`${label}: ${newVal} MVR`)
+    }
+    if (reason) {
+      lines.push(`Reason: ${reason.length > 80 ? reason.slice(0, 80) + "…" : reason}`)
+    }
+    return lines.join("\n")
+  }
+
   if (typeof details === "string") {
     return details.length > 60 ? details.slice(0, 60) + "…" : details
   }
@@ -232,7 +264,7 @@ export function AuditLogSection() {
                   <TableCell className="text-sm">{log.userName ?? "—"}</TableCell>
                   <TableCell>
                     <pre className="text-xs whitespace-pre-wrap font-sans">
-                      {renderDetails(log.details)}
+                      {renderDetails(log.action, log.details)}
                     </pre>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">

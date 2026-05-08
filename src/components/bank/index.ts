@@ -5,9 +5,6 @@ export * from './types'
 export { AddTransactionDialog } from './add-transaction-dialog'
 export type { AddTransactionDialogProps } from './add-transaction-dialog'
 
-export { SetOpeningBalanceDialog } from './opening-balance-dialog'
-export type { SetOpeningBalanceDialogProps } from './opening-balance-dialog'
-
 export { EditTransactionDialog } from './edit-transaction-dialog'
 export type { EditTransactionDialogProps } from './edit-transaction-dialog'
 

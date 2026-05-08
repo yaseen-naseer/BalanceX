@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useApiClient } from "@/hooks/use-api-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -39,11 +39,7 @@ export function CashFloatSettingsSection({ isOwner }: CashFloatSettingsSectionPr
   const [formData, setFormData] = useState({ name: "", amount: "", isDefault: false })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  useEffect(() => {
-    fetchFloats()
-  }, [])
-
-  const fetchFloats = async () => {
+  const fetchFloats = useCallback(async () => {
     try {
       const result = await api.get<FloatSetting[]>("/api/cash-float-settings")
       setFloats(result.data || [])
@@ -53,7 +49,11 @@ export function CashFloatSettingsSection({ isOwner }: CashFloatSettingsSectionPr
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [api])
+
+  useEffect(() => {
+    fetchFloats()
+  }, [fetchFloats])
 
   const handleAdd = () => {
     setEditingFloat(null)

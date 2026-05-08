@@ -7,6 +7,7 @@ import type { WalletTopup, WalletSettings, CreateWalletTopupDto } from "@/types"
 interface WalletData {
   topups: WalletTopup[]
   settings: WalletSettings | null
+  openingBalance: number
   currentBalance: number
   monthlyUsage: number
 }
@@ -20,6 +21,7 @@ interface PreviousClosingData {
 interface UseWalletReturn {
   topups: WalletTopup[]
   settings: WalletSettings | null
+  openingBalance: number
   currentBalance: number
   monthlyUsage: number
   isLoading: boolean
@@ -28,7 +30,7 @@ interface UseWalletReturn {
   addTopup: (data: CreateWalletTopupDto) => Promise<WalletTopup | null>
   editTopup: (id: string, data: { amount: number; paidAmount?: number; source: string; notes?: string }) => Promise<boolean>
   deleteTopup: (id: string) => Promise<boolean>
-  setOpeningBalance: (balance: number) => Promise<boolean>
+  setOpeningBalance: (balance: number, reason: string) => Promise<boolean>
   getTopupsByDate: (date: string) => WalletTopup[]
   getTotalTopupsByDate: (date: string) => number
   getPreviousClosing: (date: string) => Promise<PreviousClosingData | null>
@@ -37,6 +39,7 @@ interface UseWalletReturn {
 export function useWallet(): UseWalletReturn {
   const [topups, setTopups] = useState<WalletTopup[]>([])
   const [settings, setSettings] = useState<WalletSettings | null>(null)
+  const [openingBalance, setOpeningBalanceValue] = useState(0)
   const [currentBalance, setCurrentBalance] = useState(0)
   const [monthlyUsage, setMonthlyUsage] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
@@ -50,6 +53,7 @@ export function useWallet(): UseWalletReturn {
     if (result.success && result.data) {
       setTopups(result.data.topups)
       setSettings(result.data.settings)
+      setOpeningBalanceValue(result.data.openingBalance || 0)
       setCurrentBalance(result.data.currentBalance)
       setMonthlyUsage(result.data.monthlyUsage || 0)
     } else {
@@ -63,14 +67,17 @@ export function useWallet(): UseWalletReturn {
   ): Promise<WalletTopup | null> => {
     setIsLoading(true)
     setError(null)
-    const result = await api.post<WalletTopup>("/api/wallet", data)
-    if (result.success) {
-      await fetchWallet()
-      return result.data!
+    try {
+      const result = await api.post<WalletTopup>("/api/wallet", data)
+      if (result.success) {
+        await fetchWallet()
+        return result.data!
+      }
+      setError(result.error || "Failed to add top-up")
+      return null
+    } finally {
+      setIsLoading(false)
     }
-    setError(result.error || "Failed to add top-up")
-    setIsLoading(false)
-    return null
   }, [api, fetchWallet])
 
   const editTopup = useCallback(async (
@@ -88,22 +95,26 @@ export function useWallet(): UseWalletReturn {
   const deleteTopup = useCallback(async (id: string): Promise<boolean> => {
     setIsLoading(true)
     setError(null)
-    const result = await api.delete("/api/wallet", { params: { id } })
-    if (result.success) {
-      await fetchWallet()
-      return true
+    try {
+      const result = await api.delete("/api/wallet", { params: { id } })
+      if (result.success) {
+        await fetchWallet()
+        return true
+      }
+      setError(result.error || "Failed to delete top-up")
+      return false
+    } finally {
+      setIsLoading(false)
     }
-    setError(result.error || "Failed to delete top-up")
-    setIsLoading(false)
-    return false
   }, [api, fetchWallet])
 
-  const setOpeningBalance = useCallback(async (balance: number): Promise<boolean> => {
-    const result = await api.patch<WalletSettings>("/api/wallet", { openingBalance: balance })
+  const setOpeningBalance = useCallback(async (balance: number, reason: string): Promise<boolean> => {
+    const result = await api.patch<WalletSettings>("/api/wallet", { openingBalance: balance, reason })
     if (result.success) {
       await fetchWallet()
       return true
     }
+    setError(result.error || "Failed to update opening balance")
     return false
   }, [api, fetchWallet])
 
@@ -144,6 +155,7 @@ export function useWallet(): UseWalletReturn {
     () => ({
       topups,
       settings,
+      openingBalance,
       currentBalance,
       monthlyUsage,
       isLoading,
@@ -160,6 +172,7 @@ export function useWallet(): UseWalletReturn {
     [
       topups,
       settings,
+      openingBalance,
       currentBalance,
       monthlyUsage,
       isLoading,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useApiClient } from "@/hooks/use-api-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -46,11 +46,7 @@ export function ShiftSettingsSection({ isOwner }: ShiftSettingsSectionProps) {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  useEffect(() => {
-    fetchShifts()
-  }, [])
-
-  const fetchShifts = async () => {
+  const fetchShifts = useCallback(async () => {
     try {
       const result = await api.get<ShiftSetting[]>("/api/shift-settings")
       setShifts(result.data || [])
@@ -60,7 +56,11 @@ export function ShiftSettingsSection({ isOwner }: ShiftSettingsSectionProps) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [api])
+
+  useEffect(() => {
+    fetchShifts()
+  }, [fetchShifts])
 
   const handleAdd = () => {
     setEditingShift(null)

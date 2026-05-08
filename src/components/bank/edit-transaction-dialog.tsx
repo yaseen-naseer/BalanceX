@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useDialogState } from '@/hooks/use-dialog-state'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -28,7 +29,7 @@ export interface EditTransactionDialogProps {
 }
 
 export function EditTransactionDialog({ transaction, onUpdate }: EditTransactionDialogProps) {
-  const [open, setOpen] = useState(false)
+  const dialog = useDialogState()
   const [reference, setReference] = useState(transaction.reference || '')
   const [notes, setNotes] = useState(transaction.notes || '')
 
@@ -39,12 +40,12 @@ export function EditTransactionDialog({ transaction, onUpdate }: EditTransaction
     })
     if (result) {
       toast.success('Transaction updated')
-      setOpen(false)
+      dialog.close()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={dialog.isOpen} onOpenChange={dialog.onOpenChange}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary" aria-label="Edit transaction">
           <Pencil className="h-4 w-4" />
@@ -96,7 +97,7 @@ export function EditTransactionDialog({ transaction, onUpdate }: EditTransaction
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={dialog.close}>
             Cancel
           </Button>
           <Button onClick={handleSubmit}>Save Changes</Button>

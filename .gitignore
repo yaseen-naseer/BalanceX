@@ -51,3 +51,6 @@ next-env.d.ts
 
 # Windows artifacts
 nul
+
+# Local storage (uploaded screenshots, etc.) — never commit
+/storage/

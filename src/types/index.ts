@@ -107,8 +107,8 @@ export interface DailyEntryWithRelations {
     resubmittedBy: string | null
     resubmittedByUser: { id: string; name: string } | null
     resubmittedAt: string | Date | null
-    snapshotBefore: string
-    snapshotAfter: string | null
+    snapshotBefore: unknown
+    snapshotAfter: unknown
   }>
 }
 

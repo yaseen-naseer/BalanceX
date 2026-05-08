@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/db"
@@ -7,7 +7,7 @@ import { updateUserSchema, validateRequestBody } from "@/lib/validations"
 import { logError } from "@/lib/logger"
 import { BCRYPT_ROUNDS } from "@/lib/constants"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
-import { ApiErrors } from "@/lib/api-response"
+import { ApiErrors, successResponse, successOk } from "@/lib/api-response"
 
 // GET - Get single user (Owner only)
 export async function GET(
@@ -44,7 +44,7 @@ export async function GET(
       return ApiErrors.notFound("User")
     }
 
-    return NextResponse.json({ success: true, data: user })
+    return successResponse(user)
   } catch (error) {
     logError("Error fetching user", error)
     return ApiErrors.serverError("Failed to fetch user")
@@ -132,7 +132,7 @@ export async function PUT(
       }, { critical: true })
     }
 
-    return NextResponse.json({ success: true, data: user })
+    return successResponse(user)
   } catch (error) {
     logError("Error updating user", error)
     return ApiErrors.serverError("Failed to update user")
@@ -181,7 +181,7 @@ export async function DELETE(
       userAgent: getUserAgentFromRequest(request),
     }, { critical: true })
 
-    return NextResponse.json({ success: true, message: "User deactivated" })
+    return successOk()
   } catch (error) {
     logError("Error deleting user", error)
     return ApiErrors.serverError("Failed to delete user")

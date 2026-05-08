@@ -3,6 +3,7 @@ import type { DashboardAlert } from '@/types'
 import { calculateReloadWalletCost } from '@/lib/utils/balance'
 import { getWholesaleReloadTotal } from '@/lib/utils/wholesale-reload'
 import { CASH_VARIANCE_THRESHOLD, WALLET_VARIANCE_THRESHOLD, CURRENCY_CODE } from '@/lib/constants'
+import { getBusinessRules } from '@/lib/business-rules'
 
 /**
  * Calculate revenue for a daily entry's categories
@@ -296,10 +297,11 @@ export async function generateAlerts(
     }
   }
 
-  // Check for overdue credit customers
+  // Check for overdue credit customers (threshold from owner-tunable BusinessRulesSettings).
   if (!isSalesUser) {
-    const thirtyDaysAgo = new Date(today)
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const rules = await getBusinessRules()
+    const overdueThreshold = new Date(today)
+    overdueThreshold.setDate(overdueThreshold.getDate() - rules.overdueCreditDays)
 
     // D1: Include transactions in initial query to eliminate N+1
     const customers = await prisma.creditCustomer.findMany({
@@ -317,7 +319,7 @@ export async function generateAlerts(
 
       if (outstanding > 0) {
         const lastActivity = customer.transactions[0]?.date
-        if (lastActivity && lastActivity < thirtyDaysAgo) {
+        if (lastActivity && lastActivity < overdueThreshold) {
           overdueCount++
         }
       }
@@ -328,7 +330,7 @@ export async function generateAlerts(
         id: 'overdue_credit',
         type: 'overdue_credit',
         priority: 'medium',
-        message: `${overdueCount} credit customer(s) overdue (>30 days)`,
+        message: `${overdueCount} credit customer(s) overdue (>${rules.overdueCreditDays} days)`,
         count: overdueCount,
         link: '/credit',
       })

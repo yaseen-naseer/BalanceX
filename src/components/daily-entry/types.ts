@@ -68,6 +68,32 @@ export interface VarianceData {
 }
 
 /**
+ * Wallet top-up item — one row from the wallet API.
+ * Used by `WalletSection`, `WalletTopupsList`, and `useTopupGroups`.
+ */
+export interface TopupItem {
+  id: string
+  amount: number
+  paidAmount?: number
+  source: string
+  notes?: string | null
+  splitGroupId?: string | null
+}
+
+/**
+ * A grouped representation of one or more top-ups.
+ * - `single`: a single top-up not part of a split group.
+ * - `split`: multiple top-ups sharing a `splitGroupId`.
+ */
+export interface TopupGroup {
+  type: "single" | "split"
+  items: TopupItem[]
+  totalAmount: number
+  totalPaid: number
+  splitGroupId: string | null
+}
+
+/**
  * Static configuration constants
  */
 export const CATEGORIES: CategoryConfig[] = [

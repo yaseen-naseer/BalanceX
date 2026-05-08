@@ -46,12 +46,18 @@ export const userRoleSchema = z.enum(["OWNER", "ACCOUNTANT", "SALES"])
 
 export const categoryInputSchema = z.object({
   category: categoryTypeSchema,
-  consumerCash: nonNegativeNumberSchema.optional().default(0),
-  consumerTransfer: nonNegativeNumberSchema.optional().default(0),
-  consumerCredit: nonNegativeNumberSchema.optional().default(0),
-  corporateCash: nonNegativeNumberSchema.optional().default(0),
-  corporateTransfer: nonNegativeNumberSchema.optional().default(0),
-  corporateCredit: nonNegativeNumberSchema.optional().default(0),
+  // Dollar amounts are server-managed: cash/transfer fields are synced from
+  // SaleLineItem rows on every line-item add/delete, and credit fields come
+  // from the linked CreditSale rows. The client should not echo these back —
+  // they parse as `undefined` here on purpose so Prisma `update()` leaves the
+  // existing DB values untouched. (`upsertCategory` for new rows still defaults
+  // missing fields to 0 via `|| 0`, so create flows are unaffected.)
+  consumerCash: nonNegativeNumberSchema.optional(),
+  consumerTransfer: nonNegativeNumberSchema.optional(),
+  consumerCredit: nonNegativeNumberSchema.optional(),
+  corporateCash: nonNegativeNumberSchema.optional(),
+  corporateTransfer: nonNegativeNumberSchema.optional(),
+  corporateCredit: nonNegativeNumberSchema.optional(),
   quantity: z.number().int().min(0).optional().default(0),
 })
 
@@ -156,11 +162,6 @@ export const updateBankTransactionSchema = z.object({
   notes: z.string().max(500).optional().nullable(),
 })
 
-export const bankSettingsSchema = z.object({
-  openingBalance: nonNegativeNumberSchema,
-  openingDate: dateStringSchema.optional(),
-})
-
 // ============================================
 // Wallet Schemas
 // ============================================
@@ -174,9 +175,18 @@ export const createWalletTopupSchema = z.object({
   splitGroupId: z.string().max(50).optional().nullable(),
 })
 
+export const updateWalletTopupSchema = z.object({
+  id: z.string().cuid("Invalid top-up ID"),
+  amount: positiveNumberSchema,
+  paidAmount: positiveNumberSchema.optional(),
+  source: walletSourceSchema,
+  notes: z.string().max(500).optional().nullable(),
+})
+
 export const walletSettingsSchema = z.object({
   openingBalance: nonNegativeNumberSchema,
   openingDate: dateStringSchema.optional(),
+  reason: z.string().min(1, "Reason is required").max(200, "Reason too long"),
 })
 
 // ============================================
@@ -374,14 +384,52 @@ export const updateWholesaleCustomerSchema = z.object({
 // Import Schema
 // ============================================
 
+export const importedRowSchema = z.object({
+  siteName: z.string().max(200),
+  paymentMethod: z.string().max(50),
+  customerType: z.string().max(50),
+  paymentType: z.string().max(100),
+  amount: z.number().min(0).max(10_000_000),
+})
+
 export const importDataSchema = z.object({
   date: dateStringSchema,
-  data: z.array(z.object({
-    category: categoryTypeSchema.optional(),
-    customerType: customerTypeSchema.optional(),
-    paymentMethod: z.string().optional(),
-    amount: z.number().optional(),
-  })),
+  rows: z.array(importedRowSchema).min(1, "At least one row is required").max(10_000, "Too many rows"),
+  totals: z.object({
+    cash: z.number().min(0).max(100_000_000),
+    transfer: z.number().min(0).max(100_000_000),
+    total: z.number().min(0).max(100_000_000),
+  }),
+})
+
+// ============================================
+// Business Rules Settings (owner-tunable thresholds)
+// ============================================
+
+export const updateBusinessRulesSchema = z.object({
+  // ACCOUNTANT edit window — must be a sensible number of days.
+  // Lower bound 1 (can't disable editing entirely below 1 day).
+  // Upper bound 365 (a full year).
+  accountantEditWindowDays: z.number().int().min(1).max(365).optional(),
+  // Overdue credit alert threshold — same bounds; meaningful if > 0.
+  overdueCreditDays: z.number().int().min(1).max(365).optional(),
+}).refine(
+  (data) =>
+    data.accountantEditWindowDays !== undefined ||
+    data.overdueCreditDays !== undefined,
+  { message: "At least one field must be provided" },
+)
+
+// ============================================
+// Wholesale Discount Tier Schemas
+// ============================================
+
+export const updateDiscountTiersSchema = z.object({
+  tiers: z.array(z.object({
+    id: z.string().cuid("Invalid tier ID"),
+    minCashAmount: z.number().min(0).max(10_000_000),
+    isActive: z.boolean(),
+  })).min(1, "Tiers array is required"),
 })
 
 // ============================================
@@ -389,6 +437,15 @@ export const importDataSchema = z.object({
 // ============================================
 
 export const monthParamSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Invalid month format. Expected YYYY-MM")
+
+/**
+ * Validates a YYYY-MM-DD date string. Checks format, real day-of-month, and
+ * that `new Date(value)` produces a valid timestamp (rejecting e.g. 2026-02-30).
+ */
+export const dateParamSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format. Expected YYYY-MM-DD")
+  .refine((s) => !isNaN(new Date(s).getTime()), "Invalid date")
 
 export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),

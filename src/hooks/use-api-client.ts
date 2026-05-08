@@ -1,6 +1,28 @@
 "use client"
 
 import { useCallback, useMemo } from "react"
+import { signOut } from "next-auth/react"
+
+// Module-level flag so concurrent 401s from in-flight requests don't fire
+// multiple signOut calls. The first 401 wins; subsequent ones become no-ops.
+let isSigningOut = false
+
+/**
+ * Force a clean sign-out via NextAuth. Used when the server reports the session
+ * as invalid (401) — typically because the user was deactivated/deleted
+ * mid-session. Goes through the standard signOut flow which clears the
+ * session-token cookie AND redirects to /login. Closes S16 — covers the case
+ * where the active user makes API calls but never navigates, so the middleware
+ * cookie-clear branch never fires.
+ */
+function forceSignOut() {
+  if (isSigningOut) return
+  isSigningOut = true
+  signOut({ callbackUrl: "/login" }).catch(() => {
+    // Allow a retry if the network call to /api/auth/signout fails.
+    isSigningOut = false
+  })
+}
 
 /**
  * Standard API response format used across the application
@@ -98,6 +120,18 @@ export function useApiClient() {
           ...fetchOptions,
           body: body ? JSON.stringify(body) : undefined,
         })
+
+        // 401 means the server rejected the session. In this codebase 401 only
+        // ever comes from auth checks (rate-limit returns 429, permission denial
+        // returns 403), so it's safe to treat as "session invalid" and force
+        // a proper sign-out → cookie cleared → redirect to /login.
+        if (response.status === 401) {
+          forceSignOut()
+          return {
+            success: false,
+            error: "Session expired. Please log in again.",
+          }
+        }
 
         const data = await response.json()
 

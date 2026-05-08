@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useDialogState } from '@/hooks/use-dialog-state'
 import { Label } from '@/components/ui/label'
 import {
   Dialog,
@@ -34,13 +35,13 @@ export interface CustomerFormDialogProps {
 }
 
 export function CustomerFormDialog({ onSubmit, trigger, mode = 'create', initialData, onUpdate }: CustomerFormDialogProps) {
-  const [open, setOpen] = useState(false)
+  const dialog = useDialogState()
   const [formData, setFormData] = useState<NewCustomerFormData>(initialCustomerForm)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Pre-populate form when editing
   useEffect(() => {
-    if (open && mode === 'edit' && initialData) {
+    if (dialog.isOpen && mode === 'edit' && initialData) {
       setFormData({
         name: initialData.name,
         phone: initialData.phone,
@@ -48,10 +49,10 @@ export function CustomerFormDialog({ onSubmit, trigger, mode = 'create', initial
         type: initialData.type,
         creditLimit: initialData.creditLimit != null ? String(initialData.creditLimit) : '',
       })
-    } else if (!open) {
+    } else if (!dialog.isOpen) {
       setFormData(initialCustomerForm)
     }
-  }, [open, mode, initialData])
+  }, [dialog.isOpen, mode, initialData])
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
@@ -82,7 +83,7 @@ export function CustomerFormDialog({ onSubmit, trigger, mode = 'create', initial
           creditLimit: formData.creditLimit ? parseFloat(formData.creditLimit) : undefined,
         })
       }
-      setOpen(false)
+      dialog.close()
     } finally {
       setIsSubmitting(false)
     }
@@ -91,7 +92,7 @@ export function CustomerFormDialog({ onSubmit, trigger, mode = 'create', initial
   const isEdit = mode === 'edit'
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={dialog.isOpen} onOpenChange={dialog.onOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -162,7 +163,7 @@ export function CustomerFormDialog({ onSubmit, trigger, mode = 'create', initial
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
+          <Button variant="outline" onClick={dialog.close} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={isSubmitting}>

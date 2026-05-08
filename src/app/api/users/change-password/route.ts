@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/db"
@@ -7,7 +7,7 @@ import { changePasswordSchema, validateRequestBody } from "@/lib/validations"
 import { logError } from "@/lib/logger"
 import { BCRYPT_ROUNDS } from "@/lib/constants"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
-import { ApiErrors } from "@/lib/api-response"
+import { ApiErrors, successOk } from "@/lib/api-response"
 
 // POST - Change current user's password
 export async function POST(request: NextRequest) {
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     }, { critical: true })
 
-    return NextResponse.json({ success: true })
+    return successOk()
   } catch (error) {
     logError("Error changing password", error)
     return ApiErrors.serverError("Failed to change password")

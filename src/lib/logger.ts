@@ -2,6 +2,16 @@
  * Sanitized logging utility to prevent sensitive data leakage.
  * Automatically redacts known sensitive field patterns from error messages.
  */
+import { createHash } from "node:crypto"
+
+/**
+ * Stable, non-reversible 8-char hash of an identifier — safe to log for
+ * correlation without exposing the original username/email/id (S5).
+ */
+export function hashForLog(value: string | null | undefined): string {
+  if (!value) return "anonymous"
+  return createHash("sha256").update(value).digest("hex").slice(0, 8)
+}
 
 // Patterns that indicate sensitive data
 const SENSITIVE_PATTERNS = [

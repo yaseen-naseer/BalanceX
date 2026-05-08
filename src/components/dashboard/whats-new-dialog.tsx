@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useCallback } from 'react'
+import { useDialogState } from '@/hooks/use-dialog-state'
 import {
   Dialog,
   DialogContent,
@@ -35,7 +36,7 @@ import {
 } from 'lucide-react'
 
 // Bump this version string whenever you want to show the dialog again
-const WHATS_NEW_VERSION = '2026-04-10b'
+const WHATS_NEW_VERSION = '2026-05-06'
 const STORAGE_KEY = 'balancex_whats_new_seen'
 
 interface ChangeItem {
@@ -52,6 +53,68 @@ interface ChangeGroup {
 }
 
 const CHANGELOG: ChangeGroup[] = [
+  {
+    version: 'v0.9-beta',
+    date: 'May 6, 2026',
+    items: [
+      {
+        icon: <ShieldCheck className="h-4 w-4 text-teal-500" />,
+        title: 'Auto Sign-Out on Account Deactivation',
+        description:
+          'When an Owner deactivates a user mid-session, that user is now automatically signed out and their session cookie is cleared — both on the next API call and on the next page navigation. Previously the cookie could linger after deactivation, causing confusing "Unauthorized" toasts without a clean logout.',
+        tag: 'Security',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'Add User Form No Longer Leaks Edited Values',
+        description:
+          'The Add User dialog now starts empty every time. Previously, after editing an existing user, the Add form opened pre-filled with that user\'s details — which could lead to accidental "username already exists" errors despite the user being created server-side.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Bug className="h-4 w-4 text-red-500" />,
+        title: 'User Creation Shows Success Correctly',
+        description:
+          'Creating a new user now shows a green success toast as expected. Previously the user was actually created in the database but the UI showed a generic "Failed to create user" error because the API response was missing the standard envelope shape.',
+        tag: 'Fix',
+      },
+      {
+        icon: <Pencil className="h-4 w-4 text-blue-500" />,
+        title: 'Audit Log No Longer Duplicated',
+        description:
+          'The Audit Log section was previously shown in both the sidebar and the Settings page. Removed from Settings; the sidebar entry remains the single source.',
+        tag: 'Improvement',
+      },
+      {
+        icon: <Sparkles className="h-4 w-4 text-amber-500" />,
+        title: 'Faster Bank, Wallet & Top-Up Dialogs',
+        description:
+          'Bank ledger and wallet pages now compute balances using SQL aggregate queries instead of reading every transaction row into JavaScript. Edits and deletes only recompute the affected slice of the ledger, not every row. The Add Top-Up dialog\'s bank-balance check now goes through the standard API client (gets auto-signOut on session expiry for free).',
+        tag: 'Performance',
+      },
+      {
+        icon: <Shield className="h-4 w-4 text-blue-500" />,
+        title: 'Strict Date Validation on API Endpoints',
+        description:
+          'Every API endpoint that takes a date parameter now strictly validates the format (YYYY-MM-DD) and the actual calendar date. Malformed dates like "2026-13-01" or "2026-02-30" return a clear 400 error instead of crashing the server with a Prisma "Invalid Date" exception.',
+        tag: 'Security',
+      },
+      {
+        icon: <Database className="h-4 w-4 text-violet-500" />,
+        title: 'Audit Logs & Amendments Now Structured',
+        description:
+          'Audit log details and daily-entry amendment snapshots are now stored as native JSON in the database (jsonb), not stringified text. Richer admin queries become possible, and reads are typed objects instead of strings that need parsing.',
+        tag: 'Improvement',
+      },
+      {
+        icon: <Wrench className="h-4 w-4 text-slate-500" />,
+        title: 'Code Hardening Pass',
+        description:
+          'Centralized API response envelopes across every route (eliminates the class-of-bug that caused the user-creation error above). Date param validation through Zod schemas. Type-safe Node version pinned via engines + .nvmrc. Lint clean (0 errors, 0 warnings) and 22/22 unit tests pass. Removed dead code: PATCH /api/bank handler, bank opening-balance dialog, and a hardcoded 500 in wholesale-customers — all centralized into a typed constant.',
+        tag: 'Improvement',
+      },
+    ],
+  },
   {
     version: 'v0.8-beta',
     date: 'April 10, 2026',
@@ -525,17 +588,19 @@ export function openWhatsNew() {
 }
 
 export function WhatsNewDialog() {
-  const [open, setOpen] = useState(false)
+  const dialog = useDialogState()
 
-  const handleOpen = useCallback(() => setOpen(true), [])
+  const handleOpen = useCallback(() => dialog.open(), [dialog])
 
   // Auto-show on first visit for this version
   useEffect(() => {
     const seen = localStorage.getItem(STORAGE_KEY)
     if (seen !== WHATS_NEW_VERSION) {
-      const timer = setTimeout(() => setOpen(true), 800)
+      const timer = setTimeout(() => dialog.open(), 800)
       return () => clearTimeout(timer)
     }
+    // dialog.open is stable (memoised inside useDialogState); intentional: only run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Listen for manual open events
@@ -546,11 +611,11 @@ export function WhatsNewDialog() {
 
   const handleDismiss = () => {
     localStorage.setItem(STORAGE_KEY, WHATS_NEW_VERSION)
-    setOpen(false)
+    dialog.close()
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) handleDismiss() }}>
+    <Dialog open={dialog.isOpen} onOpenChange={(v) => { if (!v) handleDismiss() }}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] !grid-rows-[auto_1fr_auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

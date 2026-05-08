@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useApiClient } from "@/hooks/use-api-client"
 import {
   Dialog,
@@ -42,7 +42,6 @@ interface CashFloatDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   dailyEntryId: string
-  date: string
   type: "opening" | "closing"
   existingFloat?: CashFloatData | null
   cashExpected?: number
@@ -78,7 +77,6 @@ export function CashFloatDialog({
   open,
   onOpenChange,
   dailyEntryId,
-  date,
   type,
   existingFloat,
   cashExpected = 0,
@@ -94,6 +92,31 @@ export function CashFloatDialog({
   const [verified, setVerified] = useState(false)
   const [notes, setNotes] = useState("")
   const [calculatedTotal, setCalculatedTotal] = useState(0)
+
+  const loadSettings = useCallback(async () => {
+    try {
+      const floatResult = await api.get<FloatSetting[]>("/api/cash-float-settings")
+      if (floatResult.data) {
+        setFloatSettings(floatResult.data)
+        const defaultFloat = floatResult.data.find((f) => f.isDefault)
+        if (defaultFloat && !existingFloat) {
+          setSelectedFloatId(defaultFloat.id)
+        }
+      }
+
+      const shiftResult = await api.get<ShiftSetting[]>("/api/shift-settings")
+      if (shiftResult.data) {
+        setShiftSettings(shiftResult.data)
+        const defaultShift = shiftResult.data.find((s) => s.isDefault)
+        if (defaultShift && !existingFloat) {
+          setSelectedShiftId(defaultShift.id)
+        }
+      }
+    } catch (error) {
+      console.error("Error loading settings:", error)
+      toast.error("Failed to load cash float settings")
+    }
+  }, [api, existingFloat])
 
   // Load settings
   useEffect(() => {
@@ -119,7 +142,7 @@ export function CashFloatDialog({
         setVerified(false)
       }
     }
-  }, [open, existingFloat, type])
+  }, [open, existingFloat, type, loadSettings])
 
   // Calculate total when counts change
   useEffect(() => {
@@ -129,31 +152,6 @@ export function CashFloatDialog({
     }, 0)
     setCalculatedTotal(total)
   }, [counts])
-
-  const loadSettings = async () => {
-    try {
-      const floatResult = await api.get<FloatSetting[]>("/api/cash-float-settings")
-      if (floatResult.data) {
-        setFloatSettings(floatResult.data)
-        const defaultFloat = floatResult.data.find((f) => f.isDefault)
-        if (defaultFloat && !existingFloat) {
-          setSelectedFloatId(defaultFloat.id)
-        }
-      }
-
-      const shiftResult = await api.get<ShiftSetting[]>("/api/shift-settings")
-      if (shiftResult.data) {
-        setShiftSettings(shiftResult.data)
-        const defaultShift = shiftResult.data.find((s) => s.isDefault)
-        if (defaultShift && !existingFloat) {
-          setSelectedShiftId(defaultShift.id)
-        }
-      }
-    } catch (error) {
-      console.error("Error loading settings:", error)
-      toast.error("Failed to load cash float settings")
-    }
-  }
 
   const handleCountChange = (key: string, value: string) => {
     const numValue = parseInt(value) || 0
@@ -168,9 +166,6 @@ export function CashFloatDialog({
 
     setIsLoading(true)
     try {
-      const selectedFloat = floatSettings.find((f) => f.id === selectedFloatId)
-      const selectedShift = shiftSettings.find((s) => s.id === selectedShiftId)
-
       // Prepare denomination data
       const denomData: Record<string, number> = {}
       DENOMINATIONS.forEach((denom) => {

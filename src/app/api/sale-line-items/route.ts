@@ -3,11 +3,11 @@ import { prisma } from "@/lib/db"
 import { getAuthenticatedUser, requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
 import { canEditDailyEntry } from "@/lib/permissions"
+import { getBusinessRules } from "@/lib/business-rules"
 import { createSaleLineItemSchema, validateRequestBody } from "@/lib/validations"
 import { successResponse, ApiErrors } from "@/lib/api-response"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
 import { createAuditLog, getClientIpFromRequest, getUserAgentFromRequest } from "@/lib/audit"
-import type { CategoryType, CustomerType, PaymentMethod } from "@prisma/client"
 import { getWalletDeduction, checkWalletSufficiency } from "@/lib/utils/wallet-check"
 import { logError } from "@/lib/logger"
 import { withTransaction } from "@/lib/utils/atomic"
@@ -65,9 +65,12 @@ export async function POST(request: NextRequest) {
       return ApiErrors.badRequest("Cannot add line items to a submitted entry")
     }
 
-    // Check edit permissions
+    // Check edit permissions (uses owner-tunable accountant window from BusinessRulesSettings).
     const isOwnEntry = dailyEntry.createdBy === auth.user!.id
-    const editPerm = canEditDailyEntry(auth.user!.role, dailyEntry.date, isOwnEntry)
+    const rules = await getBusinessRules()
+    const editPerm = canEditDailyEntry(auth.user!.role, dailyEntry.date, isOwnEntry, {
+      accountantEditWindowDays: rules.accountantEditWindowDays,
+    })
     if (!editPerm.canEdit) {
       return ApiErrors.forbidden(editPerm.reason || "Cannot edit this entry")
     }

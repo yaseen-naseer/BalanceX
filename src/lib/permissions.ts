@@ -29,7 +29,6 @@ export const PERMISSIONS = {
   BANK_VIEW: "bank:view",
   BANK_DEPOSIT: "bank:deposit",
   BANK_WITHDRAW: "bank:withdraw",
-  BANK_SET_OPENING: "bank:set_opening",
   BANK_TRANSACTION_EDIT: "bank:transaction_edit",
   BANK_TRANSACTION_DELETE: "bank:transaction_delete",
 
@@ -81,7 +80,6 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.BANK_VIEW,
     PERMISSIONS.BANK_DEPOSIT,
     PERMISSIONS.BANK_WITHDRAW,
-    PERMISSIONS.BANK_SET_OPENING,
     PERMISSIONS.BANK_TRANSACTION_EDIT,
     PERMISSIONS.WALLET_VIEW,
     PERMISSIONS.WALLET_ADD_TOPUP,
@@ -150,11 +148,32 @@ export const NAV_PERMISSIONS: NavItemPermission[] = [
   { href: "/audit", allowedRoles: ["OWNER"] },
 ]
 
-// Check if a role can reopen a submitted daily entry
-export function canReopenDailyEntry(role: UserRole, entryDate: Date): boolean {
+/**
+ * Default ACCOUNTANT edit / reopen window in days. Used when a caller doesn't
+ * supply an explicit `accountantEditWindowDays` (e.g. legacy callsites or unit
+ * tests). Production callers should fetch the actual value from
+ * `BusinessRulesSettings` and pass it in.
+ */
+export const DEFAULT_ACCOUNTANT_EDIT_WINDOW_DAYS = 7
+
+interface DailyEntryPermissionOptions {
+  /** ACCOUNTANT edit / reopen window in days (from BusinessRulesSettings). */
+  accountantEditWindowDays?: number
+}
+
+// Check if a role can reopen a submitted daily entry.
+// Pass `opts.accountantEditWindowDays` from `getBusinessRules()` (server) or
+// `useBusinessRules()` (client) to honour the owner-tunable threshold; if omitted,
+// falls back to the documented 7-day default.
+export function canReopenDailyEntry(
+  role: UserRole,
+  entryDate: Date,
+  opts: DailyEntryPermissionOptions = {},
+): boolean {
   if (role === "OWNER") return true
 
   if (role === "ACCOUNTANT") {
+    const window = opts.accountantEditWindowDays ?? DEFAULT_ACCOUNTANT_EDIT_WINDOW_DAYS
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
     const entryDateClean = new Date(entryDate)
@@ -162,7 +181,7 @@ export function canReopenDailyEntry(role: UserRole, entryDate: Date): boolean {
     const daysDiff = Math.floor(
       (today.getTime() - entryDateClean.getTime()) / (1000 * 60 * 60 * 24)
     )
-    return daysDiff <= 7
+    return daysDiff <= window
   }
 
   return false
@@ -194,8 +213,10 @@ export interface EditRestrictions {
 export function canEditDailyEntry(
   role: UserRole,
   entryDate: Date,
-  isOwnEntry: boolean
+  isOwnEntry: boolean,
+  opts: DailyEntryPermissionOptions = {},
 ): EditRestrictions {
+  const window = opts.accountantEditWindowDays ?? DEFAULT_ACCOUNTANT_EDIT_WINDOW_DAYS
   const today = new Date()
   today.setUTCHours(0, 0, 0, 0)
 
@@ -211,14 +232,14 @@ export function canEditDailyEntry(
     return { canEdit: true }
   }
 
-  // Accountant can edit within 7 days
+  // Accountant can edit within the configured window (default 7 days).
   if (role === "ACCOUNTANT") {
-    if (daysDiff <= 7) {
+    if (daysDiff <= window) {
       return { canEdit: true }
     }
     return {
       canEdit: false,
-      reason: "Accountant can only edit entries within the last 7 days",
+      reason: `Accountant can only edit entries within the last ${window} day${window === 1 ? "" : "s"}`,
     }
   }
 

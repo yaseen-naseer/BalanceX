@@ -10,6 +10,10 @@ interface SuccessResponse<T> {
   data: T
 }
 
+interface OkResponse {
+  success: true
+}
+
 interface ErrorResponse {
   success: false
   error: string
@@ -26,10 +30,18 @@ interface PaginatedResponse<T> {
 }
 
 /**
- * Create a success response
+ * Create a success response with payload data.
  */
 export function successResponse<T>(data: T, status = 200): NextResponse<SuccessResponse<T>> {
   return NextResponse.json({ success: true, data }, { status })
+}
+
+/**
+ * Create a success response with no payload.
+ * Use for DELETE confirmations, settings updates, and other "operation succeeded" responses.
+ */
+export function successOk(status = 200): NextResponse<OkResponse> {
+  return NextResponse.json({ success: true }, { status })
 }
 
 /**

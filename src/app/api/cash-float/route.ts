@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/db"
 import { getAuthenticatedUser, requirePermission } from "@/lib/api-auth"
 import { PERMISSIONS } from "@/lib/permissions"
@@ -10,7 +10,9 @@ import {
   updateCashFloatSchema,
   validateRequestBody,
 } from "@/lib/validations"
+import { dateParamSchema } from "@/lib/validations/schemas"
 import { getCashSettlements, getWalletTopupsFromCash } from "@/lib/calculations/daily-entry"
+import { ApiErrors, successResponse, successOk } from "@/lib/api-response"
 
 // GET /api/cash-float?date=YYYY-MM-DD - Get cash float for a specific date
 export async function GET(request: NextRequest) {
@@ -18,14 +20,11 @@ export async function GET(request: NextRequest) {
   if (auth.error) return auth.error
 
   const { searchParams } = new URL(request.url)
-  const date = searchParams.get("date")
-
-  if (!date) {
-    return NextResponse.json(
-      { success: false, error: "Date parameter is required" },
-      { status: 400 }
-    )
+  const dateValidation = dateParamSchema.safeParse(searchParams.get("date"))
+  if (!dateValidation.success) {
+    return ApiErrors.badRequest(dateValidation.error.issues[0]?.message ?? "Invalid date parameter")
   }
+  const date = dateValidation.data
 
   try {
     const entryDate = new Date(date)
@@ -40,10 +39,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!dailyEntry) {
-      return NextResponse.json(
-        { success: false, error: "No entry found for this date" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Entry")
     }
 
     // Get available float settings
@@ -52,24 +48,13 @@ export async function GET(request: NextRequest) {
       orderBy: { amount: "asc" },
     })
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        cashFloat: dailyEntry.cashFloat
-          ? convertPrismaDecimals(dailyEntry.cashFloat)
-          : null,
-        availableSettings: floatSettings.map((s) => ({
-          ...s,
-          amount: Number(s.amount),
-        })),
-      },
+    return successResponse({
+      cashFloat: dailyEntry.cashFloat ? convertPrismaDecimals(dailyEntry.cashFloat) : null,
+      availableSettings: floatSettings.map((s) => ({ ...s, amount: Number(s.amount) })),
     })
   } catch (error) {
     logError("Error fetching cash float", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch cash float" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to fetch cash float")
   }
 }
 
@@ -90,10 +75,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingFloat) {
-      return NextResponse.json(
-        { success: false, error: "Cash float already exists for this entry" },
-        { status: 409 }
-      )
+      return ApiErrors.conflict("Cash float already exists for this entry")
     }
 
     // Get the selected float amount
@@ -141,19 +123,10 @@ export async function POST(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: convertPrismaDecimals(cashFloat),
-      },
-      { status: 201 }
-    )
+    return successResponse(convertPrismaDecimals(cashFloat), 201)
   } catch (error) {
     logError("Error creating cash float", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to create cash float" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to create cash float")
   }
 }
 
@@ -178,10 +151,7 @@ export async function PATCH(request: NextRequest) {
     })
 
     if (!existingFloat) {
-      return NextResponse.json(
-        { success: false, error: "Cash float not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Cash float")
     }
 
     let updateData: Record<string, unknown> = {}
@@ -288,16 +258,10 @@ export async function PATCH(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json({
-      success: true,
-      data: convertPrismaDecimals(updatedFloat),
-    })
+    return successResponse(convertPrismaDecimals(updatedFloat))
   } catch (error) {
     logError("Error updating cash float", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to update cash float" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to update cash float")
   }
 }
 
@@ -311,10 +275,7 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id")
 
     if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Cash float ID is required" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Cash float ID is required")
     }
 
     const floatToDelete = await prisma.cashFloatLog.findUnique({ where: { id }, select: { dailyEntryId: true } })
@@ -332,12 +293,9 @@ export async function DELETE(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json({ success: true })
+    return successOk()
   } catch (error) {
     logError("Error deleting cash float", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to delete cash float" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to delete cash float")
   }
 }

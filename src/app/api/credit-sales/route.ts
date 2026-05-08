@@ -10,6 +10,7 @@ import { calculateCustomerOutstanding } from "@/lib/calculations/credit"
 import { convertPrismaDecimals } from "@/lib/utils/serialize"
 import { CURRENCY_CODE } from "@/lib/constants"
 import { logError } from "@/lib/logger"
+import { ApiErrors, successOk } from "@/lib/api-response"
 
 // POST /api/credit-sales - Create a new credit sale
 export async function POST(request: NextRequest) {
@@ -24,10 +25,7 @@ export async function POST(request: NextRequest) {
   })
 
   if (!userExists) {
-    return NextResponse.json(
-      { success: false, error: "Session expired. Please logout and login again." },
-      { status: 401 }
-    )
+    return ApiErrors.sessionExpired()
   }
 
   const isOwner = auth.user!.role === "OWNER"
@@ -50,18 +48,12 @@ export async function POST(request: NextRequest) {
       })
 
       if (!wholesaleCustomer) {
-        return NextResponse.json(
-          { success: false, error: "Wholesale customer not found" },
-          { status: 404 }
-        )
+        return ApiErrors.notFound("Wholesale customer")
       }
 
       // B7: Reject credit sales for deactivated wholesale customers
       if (!wholesaleCustomer.isActive) {
-        return NextResponse.json(
-          { success: false, error: "Wholesale customer is deactivated" },
-          { status: 400 }
-        )
+        return ApiErrors.badRequest("Wholesale customer is deactivated")
       }
 
       // Find or create a matching CreditCustomer by phone
@@ -84,10 +76,7 @@ export async function POST(request: NextRequest) {
     } else if (directCustomerId) {
       customerId = directCustomerId
     } else {
-      return NextResponse.json(
-        { success: false, error: "Customer ID or wholesale customer ID is required" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Customer ID or wholesale customer ID is required")
     }
 
     // Get customer details for credit limit check
@@ -96,25 +85,16 @@ export async function POST(request: NextRequest) {
     })
 
     if (!customer) {
-      return NextResponse.json(
-        { success: false, error: "Customer not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Customer")
     }
 
     if (!customer.isActive) {
-      return NextResponse.json(
-        { success: false, error: "Customer is inactive" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Customer is inactive")
     }
 
     // If overrideLimit is sent by non-Owner, reject it early (security check)
     if (overrideLimit && !isOwner) {
-      return NextResponse.json(
-        { success: false, error: "Only Owner can override credit limits" },
-        { status: 403 }
-      )
+      return ApiErrors.forbidden("Only Owner can override credit limits")
     }
 
     // Get daily entry to verify it exists and get date
@@ -123,10 +103,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!dailyEntry) {
-      return NextResponse.json(
-        { success: false, error: "Daily entry not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Daily entry")
     }
 
     // For wholesale credit, the credit balance tracks cashAmount (what customer owes)
@@ -271,10 +248,7 @@ export async function POST(request: NextRequest) {
           )
         }
         if (typed.type === "WALLET_INSUFFICIENT") {
-          return NextResponse.json(
-            { success: false, error: typed.message },
-            { status: 400 }
-          )
+          return ApiErrors.badRequest(typed.message ?? "Wallet has insufficient balance")
         }
       }
       throw err
@@ -317,6 +291,9 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Domain extension: success envelope carries `limitOverridden` + `warning` so
+    // the credit-sale-dialog can surface owner-override info via a toast. Read by
+    // [src/components/credit/credit-sale-dialog.tsx] alongside `result.data`.
     return NextResponse.json({
       success: true,
       data: convertPrismaDecimals(creditSale),
@@ -327,10 +304,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     logError("Error creating credit sale", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to create credit sale" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to create credit sale")
   }
 }
 
@@ -344,10 +318,7 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id")
 
     if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Credit sale ID is required" },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest("Credit sale ID is required")
     }
 
     let reason: string | null = null
@@ -368,10 +339,7 @@ export async function DELETE(request: NextRequest) {
     })
 
     if (!creditSale) {
-      return NextResponse.json(
-        { success: false, error: "Credit sale not found" },
-        { status: 404 }
-      )
+      return ApiErrors.notFound("Credit sale")
     }
 
     // Delete linked records using FKs (B1, B2) then the credit sale itself — atomically
@@ -438,12 +406,9 @@ export async function DELETE(request: NextRequest) {
       userAgent: getUserAgentFromRequest(request),
     })
 
-    return NextResponse.json({ success: true })
+    return successOk()
   } catch (error) {
     logError("Error deleting credit sale", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to delete credit sale" },
-      { status: 500 }
-    )
+    return ApiErrors.serverError("Failed to delete credit sale")
   }
 }
